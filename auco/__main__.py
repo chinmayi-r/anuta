@@ -25,7 +25,7 @@ def test_constraint(worker_idx: int, dfpartition: pd.DataFrame, auco: Auco) -> L
                 continue
             assignments[auco.variables[name]] = val
         for i, constraint in enumerate(auco.kb):
-            if violations[1]: 
+            if violations[i]: 
                 #* This constraint has already been violated.
                 continue
             #* Evaluate the constraint with the given assignments
@@ -33,6 +33,7 @@ def test_constraint(worker_idx: int, dfpartition: pd.DataFrame, auco: Auco) -> L
             if not sat:
                 violations[i] = 1
 
+    log.info(f"Worker {worker_idx+1} finished.")
     return violations
 
 def save_constraints(constraints, fname: str='constraints'):
@@ -76,11 +77,11 @@ def main(auco: Auco, metadf: pd.DataFrame):
     args = [(i, df, auco) for i, df in enumerate(dfpartitions)]
 
     # Use multiprocessing Pool to test constraints in parallel
-    print(f"Testing constraints in parallel ...")
+    log.info(f"Testing constraints in parallel ...")
     pool = Pool(core_count)
     violation_indices = pool.starmap(test_constraint, args)
 
-    print(f"All workers finished.")
+    log.info(f"All workers finished.")
     aggregated_violations = np.logical_or.reduce(violation_indices)
     learned_kb = auco.kb.copy()
     removed_count = 0
@@ -93,7 +94,7 @@ def main(auco: Auco, metadf: pd.DataFrame):
     print(f"{len(learned_kb)=}, {len(auco.kb)=} ({removed_count=})\n")
     save_constraints(learned_kb, 'learned')
     
-    print(f"Filtering redundant constraints ...")
+    log.info(f"Filtering redundant constraints ...")
     assumptions = [v >= 0 for v in auco.variables.values()]
     cnf = sp.And(*(learned_kb + assumptions))
     simplified_logic = cnf.simplify()
