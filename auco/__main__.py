@@ -8,6 +8,7 @@ from tqdm import tqdm
 import sympy as sp
 from concurrent.futures import ThreadPoolExecutor, as_completed, ProcessPoolExecutor
 from typing import *
+from copy import deepcopy
 
 from grammar import Auco, log
 import json
@@ -15,7 +16,7 @@ import json
 
 auco : Auco = None
 
-def test_constraint(worker_idx: int, dfpartition: pd.DataFrame) -> List[int]:
+def test_constraints(worker_idx: int, dfpartition: pd.DataFrame) -> List[int]:
     global auco
     assert auco, "auco is not initialized."
     
@@ -30,6 +31,7 @@ def test_constraint(worker_idx: int, dfpartition: pd.DataFrame) -> List[int]:
             if name not in auco.variables:
                 continue
             assignments[auco.variables[name]] = val
+        
         for k, constraint in enumerate(auco.kb):
             if violations[k] == 1: 
                 #* This constraint has already been violated.
@@ -38,8 +40,6 @@ def test_constraint(worker_idx: int, dfpartition: pd.DataFrame) -> List[int]:
             sat = constraint.subs(assignments | auco.constants)
             if not sat:
                 violations[k] = 1
-
-    log.info(f"Worker {worker_idx+1} finished.")
     return violations
 
 def save_constraints(constraints, fname: str='constraints'):
@@ -82,13 +82,13 @@ def main(metadf: pd.DataFrame):
     
     #* Prepare arguments for parallel processing
     core_count = psutil.cpu_count()
-    dfpartitions = np.array_split(metadf, core_count)
+    dfpartitions = [df.reset_index(drop=True) for df in np.array_split(metadf, core_count)]
     args = [(i, df) for i, df in enumerate(dfpartitions)]
 
     # Use multiprocessing Pool to test constraints in parallel
     print(f"Testing constraints in parallel ...")
     pool = Pool(core_count)
-    violation_indices = pool.starmap(test_constraint, args)
+    violation_indices = pool.starmap(test_constraints, args)
     # pool.close()
 
     log.info(f"All workers finished.")
