@@ -4,8 +4,6 @@ set -x
 {
     sudo apt update -y && sudo apt upgrade -y
 
-    unzip /data/metadata.zip -d /data/
-
     # * Update python to 3.10
     sudo add-apt-repository ppa:deadsnakes/ppa -y
     sudo apt-get install python3.10 -y
@@ -24,6 +22,8 @@ set -x
 
     sudo apt install htop -y
     git config --global credential.helper store
+
+    unzip /data/metadata.zip -d /data/
 
     exit 0
 }

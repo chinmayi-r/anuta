@@ -7,7 +7,7 @@ from tqdm import tqdm
 import sympy as sp
 from concurrent.futures import ThreadPoolExecutor, as_completed, ProcessPoolExecutor
 
-from grammar import Auco
+from grammar import Auco, log
 import json
 
 g_df = None
@@ -16,7 +16,7 @@ def test_constraint(i, constraint, auco):
     global g_df
     
     learned_kb = auco.kb.copy()
-    print(f"Testing constraint {i+1}/{len(auco.kb)}: {constraint}")
+    log.info(f"Testing constraint {i+1}/{len(auco.kb)}: {constraint}")
     for _, sample in g_df.iterrows():
         assignments = {}
         for name, val in sample.items():
@@ -30,7 +30,7 @@ def test_constraint(i, constraint, auco):
         # If constraint is violated, mark for removal
         if not sat and constraint in learned_kb:
             learned_kb.remove(constraint)
-            print(f"Violation occurred: {constraint} removed.")
+            log.info(f"Removed {constraint}")
             return i  # Return the index of the violated constraint
     
     return None  # No violation found for this constraint
@@ -103,8 +103,11 @@ def main(auco: Auco):
     
 
 if __name__ == '__main__':
-    metadf = pd.read_csv('data/meta_test.csv')
+    file = f"./data/meta_{sys.argv[1]}.csv"
+    print(f"Loading data from {file}")
+    metadf = pd.read_csv(file)
     g_df = metadf
+    
     variables = []
     for col in metadf.iloc[:, 2:]:
         if not 'egress' in col and not 'out' in col:
