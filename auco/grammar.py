@@ -128,7 +128,7 @@ class Auco(object):
             else:
                 self.kb.append(constraint)
                 num_constraints += 1
-                if num_constraints % 100 == 0:
+                if num_constraints % 1000 == 0:
                     log.info(f"Generated {num_constraints} constraints.")
         log.info(f"Skipped {num_trivial} trivial constraints.")
         log.info(f"Populated KB with {len(self.kb)} constraints.")

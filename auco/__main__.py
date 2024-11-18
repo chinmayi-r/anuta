@@ -13,25 +13,31 @@ from grammar import Auco, log
 import json
 
 
-def test_constraint(worker_idx: int, dfpartition: pd.DataFrame, auco: Auco) -> List[int]:
+auco : Auco = None
+
+def test_constraint(worker_idx: int, dfpartition: pd.DataFrame) -> List[int]:
+    global auco
+    assert auco, "auco is not initialized."
+    
     log.info(f"Worker {worker_idx+1} started.")
     #* 1: Violated, 0: Not violated
     violations = [0 for _ in range(len(auco.kb))]
     
     for _, sample in tqdm(dfpartition.iterrows(), total=len(dfpartition)):
+        # print(f"Testing with sample {j+1}/{len(dfpartition)}.", end='\r')
         assignments = {}
         for name, val in sample.items():
             if name not in auco.variables:
                 continue
             assignments[auco.variables[name]] = val
-        for i, constraint in enumerate(auco.kb):
-            if violations[i]: 
+        for k, constraint in enumerate(auco.kb):
+            if violations[k] == 1: 
                 #* This constraint has already been violated.
                 continue
             #* Evaluate the constraint with the given assignments
             sat = constraint.subs(assignments | auco.constants)
             if not sat:
-                violations[i] = 1
+                violations[k] = 1
 
     log.info(f"Worker {worker_idx+1} finished.")
     return violations
@@ -44,7 +50,10 @@ def save_constraints(constraints, fname: str='constraints'):
     with open(f"{fname}.json", 'w') as f:
         json.dump(expressions_str, f)
     
-def main(auco: Auco, metadf: pd.DataFrame):
+def main(metadf: pd.DataFrame):
+    global auco
+    assert auco, "auco is not initialized."
+    
     # learned_kb = auco.kb.copy()
     # removed_count = 0
     # for i, constraint in enumerate(auco.kb):
@@ -74,12 +83,13 @@ def main(auco: Auco, metadf: pd.DataFrame):
     #* Prepare arguments for parallel processing
     core_count = psutil.cpu_count()
     dfpartitions = np.array_split(metadf, core_count)
-    args = [(i, df, auco) for i, df in enumerate(dfpartitions)]
+    args = [(i, df) for i, df in enumerate(dfpartitions)]
 
     # Use multiprocessing Pool to test constraints in parallel
-    log.info(f"Testing constraints in parallel ...")
+    print(f"Testing constraints in parallel ...")
     pool = Pool(core_count)
     violation_indices = pool.starmap(test_constraint, args)
+    # pool.close()
 
     log.info(f"All workers finished.")
     aggregated_violations = np.logical_or.reduce(violation_indices)
@@ -128,5 +138,5 @@ if __name__ == '__main__':
     
     auco.populate_kb()
     
-    main(auco, metadf)
+    main(metadf)
     sys.exit(0)
