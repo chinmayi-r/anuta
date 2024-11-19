@@ -33,7 +33,7 @@ def test_constraints(worker_idx: int, dfpartition: pd.DataFrame) -> List[int]:
             assignments[auco.variables[name]] = val
         
         for k, constraint in enumerate(auco.kb):
-            if violations[k] == 1: 
+            if violations[k]: 
                 #* This constraint has already been violated.
                 continue
             #* Evaluate the constraint with the given assignments
@@ -82,7 +82,7 @@ def main(metadf: pd.DataFrame, label: str):
     # print(f"{len(learned_kb)=}, {len(auco.kb)=} ({removed_count=})\n")
     
     #* Prepare arguments for parallel processing
-    core_count = psutil.cpu_count() - 1
+    core_count = psutil.cpu_count()
     dfpartitions = [df.reset_index(drop=True) for df in np.array_split(metadf, core_count)]
     args = [(i, df) for i, df in enumerate(dfpartitions)]
 
@@ -94,15 +94,14 @@ def main(metadf: pd.DataFrame, label: str):
 
     log.info(f"All workers finished.")
     aggregated_violations = np.logical_or.reduce(violation_indices)
-    learned_kb = auco.kb.copy()
-    removed_count = 0
+    learned_kb = []
     log.info(f"Aggregating violations ...")
     #* Update learned_kb based on the violated constraints
-    for index, is_violated in tqdm(enumerate(aggregated_violations)):
-        if is_violated:
-            learned_kb.remove(auco.kb[index])
-            removed_count += 1
+    for index, is_violated in tqdm(enumerate(aggregated_violations), total=len(aggregated_violations)):
+        if not is_violated:
+            learned_kb.append(auco.kb[index])
 
+    removed_count = len(auco.kb) - len(learned_kb)
     print(f"{len(learned_kb)=}, {len(auco.kb)=} ({removed_count=})\n")
     save_constraints(learned_kb, f'learned_{label}')
     
@@ -130,7 +129,7 @@ if __name__ == '__main__':
             variables.append(col)
 
     constants = {
-        'burst_threshold': round(0.5*metadf.ingressBytes_sampled.max().item()),
+        'burst_threshold': round(2891883 / 7100), # round(0.5*metadf.ingressBytes_sampled.max().item()),
     }
     # print(f"{variables=} {constants=}")
     
