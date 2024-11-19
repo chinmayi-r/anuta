@@ -40,6 +40,7 @@ def test_constraints(worker_idx: int, dfpartition: pd.DataFrame) -> List[int]:
             sat = constraint.subs(assignments | auco.constants)
             if not sat:
                 violations[k] = 1
+    log.info(f"Worker {worker_idx+1} finished.")
     return violations
 
 def save_constraints(constraints, fname: str='constraints'):
@@ -50,7 +51,7 @@ def save_constraints(constraints, fname: str='constraints'):
     with open(f"{fname}.json", 'w') as f:
         json.dump(expressions_str, f)
     
-def main(metadf: pd.DataFrame):
+def main(metadf: pd.DataFrame, label: str):
     global auco
     assert auco, "auco is not initialized."
     
@@ -81,7 +82,7 @@ def main(metadf: pd.DataFrame):
     # print(f"{len(learned_kb)=}, {len(auco.kb)=} ({removed_count=})\n")
     
     #* Prepare arguments for parallel processing
-    core_count = psutil.cpu_count()
+    core_count = psutil.cpu_count() - 1
     dfpartitions = [df.reset_index(drop=True) for df in np.array_split(metadf, core_count)]
     args = [(i, df) for i, df in enumerate(dfpartitions)]
 
@@ -95,14 +96,15 @@ def main(metadf: pd.DataFrame):
     aggregated_violations = np.logical_or.reduce(violation_indices)
     learned_kb = auco.kb.copy()
     removed_count = 0
+    log.info(f"Aggregating violations ...")
     #* Update learned_kb based on the violated constraints
-    for index, is_violated in enumerate(aggregated_violations):
+    for index, is_violated in tqdm(enumerate(aggregated_violations)):
         if is_violated:
             learned_kb.remove(auco.kb[index])
             removed_count += 1
 
     print(f"{len(learned_kb)=}, {len(auco.kb)=} ({removed_count=})\n")
-    save_constraints(learned_kb, 'learned')
+    save_constraints(learned_kb, f'learned_{label}')
     
     log.info(f"Filtering redundant constraints ...")
     assumptions = [v >= 0 for v in auco.variables.values()]
@@ -113,7 +115,7 @@ def main(metadf: pd.DataFrame):
     filtered_count = len(learned_kb) - len(reduced_kb)
     print(f"{len(learned_kb)=}, {len(reduced_kb)=} ({filtered_count=})\n")
     
-    save_constraints(reduced_kb, 'reduced')
+    save_constraints(reduced_kb, f'reduced_{label}')
     
 
 if __name__ == '__main__':
@@ -138,5 +140,5 @@ if __name__ == '__main__':
     
     auco.populate_kb()
     
-    main(metadf)
+    main(metadf, sys.argv[1])
     sys.exit(0)
