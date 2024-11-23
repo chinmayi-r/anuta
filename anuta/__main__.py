@@ -10,34 +10,34 @@ from concurrent.futures import ThreadPoolExecutor, as_completed, ProcessPoolExec
 from typing import *
 from copy import deepcopy
 
-from grammar import Auco, log
+from grammar import Anuta, log
 import json
 
 
-auco : Auco = None
+anuta : Anuta = None
 
 def test_constraints(worker_idx: int, dfpartition: pd.DataFrame) -> List[int]:
-    global auco
-    assert auco, "auco is not initialized."
+    global anuta
+    assert anuta, "anuta is not initialized."
     
     log.info(f"Worker {worker_idx+1} started.")
     #* 1: Violated, 0: Not violated
-    violations = [0 for _ in range(len(auco.kb))]
+    violations = [0 for _ in range(len(anuta.kb))]
     
     for _, sample in tqdm(dfpartition.iterrows(), total=len(dfpartition)):
         # print(f"Testing with sample {j+1}/{len(dfpartition)}.", end='\r')
         assignments = {}
         for name, val in sample.items():
-            if name not in auco.variables:
+            if name not in anuta.variables:
                 continue
-            assignments[auco.variables[name]] = val
+            assignments[anuta.variables[name]] = val
         
-        for k, constraint in enumerate(auco.kb):
+        for k, constraint in enumerate(anuta.kb):
             if violations[k]: 
                 #* This constraint has already been violated.
                 continue
             #* Evaluate the constraint with the given assignments
-            sat = constraint.subs(assignments | auco.constants)
+            sat = constraint.subs(assignments | anuta.constants)
             if not sat:
                 violations[k] = 1
     log.info(f"Worker {worker_idx+1} finished.")
@@ -52,34 +52,8 @@ def save_constraints(constraints, fname: str='constraints'):
         json.dump(expressions_str, f)
     
 def main(metadf: pd.DataFrame, label: str):
-    global auco
-    assert auco, "auco is not initialized."
-    
-    # learned_kb = auco.kb.copy()
-    # removed_count = 0
-    # for i, constraint in enumerate(auco.kb):
-    #     if constraint not in learned_kb: 
-    #         #* Already removed.
-    #         continue
-        
-    #     print(f"Testing constraint {i+1}/{len(auco.kb)}:")
-    #     for _, sample in tqdm(metadf.iterrows(), total=len(metadf)):
-    #         assignments = {}
-    #         for name, val in sample.items():
-    #             if name not in auco.variables: continue
-    #             #! The substitution has to be done with the var itself.
-    #             #! Var name str is insufficient since the var has assumptions
-    #             #! e.g., ≥0 and being int.
-    #             assignments[auco.variables[name]] = val
-    #         sat = constraint.subs(assignments | auco.constants)
-            
-    #         if not sat and constraint in learned_kb:
-    #             learned_kb.remove(constraint)
-    #             removed_count += 1
-    #             # print('Highlighting violation ...')
-    #             print(f"\n\t\tViolation occurred: {constraint} removed.")
-    #             break
-    # print(f"{len(learned_kb)=}, {len(auco.kb)=} ({removed_count=})\n")
+    global anuta
+    assert anuta, "anuta is not initialized."
     
     #* Prepare arguments for parallel processing
     core_count = psutil.cpu_count()
@@ -99,14 +73,14 @@ def main(metadf: pd.DataFrame, label: str):
     #* Update learned_kb based on the violated constraints
     for index, is_violated in tqdm(enumerate(aggregated_violations), total=len(aggregated_violations)):
         if not is_violated:
-            learned_kb.append(auco.kb[index])
+            learned_kb.append(anuta.kb[index])
 
-    removed_count = len(auco.kb) - len(learned_kb)
-    print(f"{len(learned_kb)=}, {len(auco.kb)=} ({removed_count=})\n")
+    removed_count = len(anuta.kb) - len(learned_kb)
+    print(f"{len(learned_kb)=}, {len(anuta.kb)=} ({removed_count=})\n")
     save_constraints(learned_kb, f'learned_{label}')
     
     log.info(f"Filtering redundant constraints ...")
-    assumptions = [v >= 0 for v in auco.variables.values()]
+    assumptions = [v >= 0 for v in anuta.variables.values()]
     cnf = sp.And(*(learned_kb + assumptions))
     simplified_logic = cnf.simplify()
     reduced_kb = list(simplified_logic.args) \
@@ -133,11 +107,11 @@ if __name__ == '__main__':
     }
     # print(f"{variables=} {constants=}")
     
-    auco = Auco(variables, constants, operators=[0, 1, 2])
-    pprint(auco.variables)
-    pprint(auco.constants)
+    anuta = Anuta(variables, constants, operators=[0, 1, 2])
+    pprint(anuta.variables)
+    pprint(anuta.constants)
     
-    auco.populate_kb()
+    anuta.populate_kb()
     
     main(metadf, sys.argv[1])
     sys.exit(0)

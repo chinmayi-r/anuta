@@ -7,7 +7,7 @@ from enum import Enum, auto
 import logging
 
 
-log = logging.getLogger("auco")
+log = logging.getLogger("anuta")
 handler = logging.StreamHandler()
 # handler.setLevel(logging.INFO)
 formatter = logging.Formatter(
@@ -37,7 +37,7 @@ class Operator(Enum):
     PLUS = auto()
     MAX = auto()
 
-class Auco(object):
+class Anuta(object):
     def __init__(self, variables: List[str], constants: Dict[str, int]=None, operators: List[int]=None):
         variables = sp.symbols(' '.join(variables), integer=True, nonnegative=True)
         self.variables = {v.name: v for v in variables}
@@ -128,7 +128,7 @@ class Auco(object):
             else:
                 self.kb.append(constraint)
                 num_constraints += 1
-                if num_constraints % 1000 == 0:
+                if num_constraints % 10_000 == 0:
                     log.info(f"Generated {num_constraints} constraints.")
         log.info(f"Skipped {num_trivial} trivial constraints.")
         log.info(f"Populated KB with {len(self.kb)} constraints.")
