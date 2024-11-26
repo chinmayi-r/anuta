@@ -8,7 +8,7 @@ set -x
     sudo add-apt-repository ppa:deadsnakes/ppa -y
     sudo apt-get install python3.10 -y
     sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.8 1 
-    sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 2 # * Larger number, higher priority/
+    sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 2 # * Larger number, higher priority
     sudo update-alternatives --install /usr/bin/python python /usr/bin/python3.10 2
 
     # * Install pip with the right version.
@@ -23,7 +23,7 @@ set -x
     sudo apt install htop -y
     git config --global credential.helper store
 
-    unzip data/metadata.zip -d data/
+    unzip data/meta.zip -d data/
 
     exit 0
 }
