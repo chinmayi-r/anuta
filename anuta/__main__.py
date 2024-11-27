@@ -126,18 +126,25 @@ def main(metadf: pd.DataFrame, label: str):
     # pprint(aggregated_bounds)
     print(f"{len(learned_kb)=}, {len(anuta.kb)=} ({removed_count=})")
     save_constraints(learned_kb, f'learned_{label}')
-    print(f"Time taken: {end-start:.2f}s\n\n")
+    print(f"Learning time: {end-start:.2f}s\n\n")
     
-    # log.info(f"Filtering redundant constraints ...")
-    # assumptions = [v >= 0 for v in anuta.variables.values()]
-    # cnf = sp.And(*(learned_kb + assumptions))
-    # simplified_logic = cnf.simplify()
-    # reduced_kb = list(simplified_logic.args) \
-    #     if isinstance(simplified_logic, sp.And) else [simplified_logic]
-    # filtered_count = len(learned_kb) - len(reduced_kb)
-    # print(f"{len(learned_kb)=}, {len(reduced_kb)=} ({filtered_count=})\n")
+    if len(learned_kb) > 200: 
+        #* Skip pruning if the number of constraints is too large
+        return
     
-    # save_constraints(reduced_kb, f'reduced_{label}')
+    start = perf_counter()
+    log.info(f"Pruning redundant constraints ...")
+    assumptions = [v >= 0 for v in anuta.variables.values()]
+    cnf = sp.And(*(learned_kb + assumptions))
+    simplified_logic = cnf.simplify()
+    reduced_kb = list(simplified_logic.args) \
+        if isinstance(simplified_logic, sp.And) else [simplified_logic]
+    filtered_count = len(learned_kb) - len(reduced_kb)
+    end = perf_counter()
+    print(f"{len(learned_kb)=}, {len(reduced_kb)=} ({filtered_count=})\n")
+    print(f"Pruning time: {end-start:.2f}s\n\n")
+    
+    save_constraints(reduced_kb, f'reduced_{label}')
     
 
 if __name__ == '__main__':
