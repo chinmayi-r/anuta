@@ -1,42 +1,16 @@
 from itertools import combinations
 from typing import *
 import sympy as sp
-import sys
 from dataclasses import dataclass
-
 from enum import Enum, auto
 
-import logging
+from utils import log, consecutive_combinations
 
-
-log = logging.getLogger("anuta")
-handler = logging.StreamHandler()
-# handler.setLevel(logging.INFO)
-formatter = logging.Formatter(
-    "[%(name)s @ %(asctime)s] %(levelname)-8s | %(message)s", 
-    datefmt="%H:%M:%S"  # Format to show only hour, minute, and second
-)
-handler.setFormatter(formatter)
-log.addHandler(handler)
-log.setLevel(logging.INFO)
-
-
-def consecutive_combinations(lst):
-    ccombo = []
-    n = len(lst)
-    
-    #* Start with combinations of size 2 up to size n
-    for size in range(2, n + 1):  
-        #* Ensure that the combination is consecutive
-        for start in range(n - size + 1):  
-            ccombo.append(lst[start: start+size])
-    
-    return ccombo
 
 @dataclass
-class IntBounds(object):
-    lb: int
-    ub: int
+class Bounds(object):
+    lb: float
+    ub: float
 
 class Operator(Enum):
     NOP = 0
@@ -44,7 +18,7 @@ class Operator(Enum):
     MAX = auto()
 
 class Anuta(object):
-    def __init__(self, variables: List[str], bounds: Dict[str, IntBounds], constants: Dict[str, int]=None, operators: List[int]=None):
+    def __init__(self, variables: List[str], bounds: Dict[str, Bounds], constants: Dict[str, int]=None, operators: List[int]=None):
         variables = sp.symbols(' '.join(variables), integer=True, nonnegative=True)
         self.variables = {v.name: v for v in variables}
         self.constants = constants
