@@ -84,19 +84,21 @@ class Anuta(object):
                 for expr_rhs in expressions[i+1:]:
                     # if expr_lhs == expr_rhs: continue
                     # if expr_lhs.args[0] == expr_rhs.args[0]: continue
-                    # #! Do NOT avoid (Var==const1) OR (Var==const2)
                     
-                    #* Avoid (Var==const1) AND (Var==const2)
-                    if type(expr_rhs) == sp.Equality and expr_lhs.args[0] != expr_rhs.args[0]:
-                        #* (Var==const1) AND (Var==const2)
-                        yield sp.And(expr_lhs, expr_rhs)
-                        #* ~(Var==const1) AND (Var==const2)
-                        yield sp.And(sp.Not(expr_lhs), expr_rhs)
-                        #* ~(Var==const1) AND ~(Var==const2)
-                        yield sp.And(sp.Not(expr_lhs), sp.Not(expr_rhs))
-                        #^ AND constraints are too restrictive and will be all eliminated.
-                        #! But, we might need them for arity-3 constraints.
+                    if type(expr_rhs) == sp.Equality:
                         
+                        #& Avoid (Var==const1) AND (Var==const2)
+                        if expr_lhs.args[0] != expr_rhs.args[0]:
+                            #* (Var==const1) AND (Var==const2)
+                            yield sp.And(expr_lhs, expr_rhs)
+                            #* ~(Var==const1) AND (Var==const2)
+                            yield sp.And(sp.Not(expr_lhs), expr_rhs)
+                            #* ~(Var==const1) AND ~(Var==const2)
+                            yield sp.And(sp.Not(expr_lhs), sp.Not(expr_rhs))
+                            #^ AND constraints are too restrictive and will be all eliminated.
+                            #! But, we might need them for arity-3 constraints.
+                        
+                        #! Do NOT avoid (Var==const1) OR (Var==const2)
                         #* (Var==const1) OR (Var==const2)
                         yield sp.Or(expr_lhs, expr_rhs)
                         #* ~(Var==const1) OR (Var==const2)
@@ -162,7 +164,6 @@ class Anuta(object):
         interval_filtered = 0
         arity2_constraints = []
         for constraint in self.generate_arity2_constraints():
-            # log.info(type(constraint))
             if isinstance(constraint, sp.logic.boolalg.BooleanTrue):
                 num_trivial += 1
             else:
@@ -171,6 +172,7 @@ class Anuta(object):
                     interval_filtered += 1
                     continue
                 
+                #* Dedupe: sp.Or(sp.Eq(x, 10), sp.Eq(y, 303)) == sp.Or(sp.Eq(y, 303), sp.Eq(x, 10))
                 if constraint in added:
                     num_duplicates += 1
                     continue
