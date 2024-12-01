@@ -11,25 +11,32 @@ from typing import *
 from copy import deepcopy
 from time import perf_counter
 
-from grammar import Anuta
-from constructor import Constructor, Millisampler
-from miner import millisampler_miner
+from grammar import AnutaMilli
+from constructor import Constructor, Millisampler, Cidds001
+from miner import miner
 from utils import log, save_constraints
 import json
 
 
-anuta : Anuta = None
+anuta : AnutaMilli = None
 
     
 def main(constructor: Constructor, label: str):
-    millisampler_miner(constructor, label)
+    miner(constructor, label)
     
 
 if __name__ == '__main__':
-    boundsfile = f"./data/meta_bounds.json"
-    filepath = f"./data/meta_w10_s5_{sys.argv[1]}.csv"
+    # boundsfile = f"./data/meta_bounds.json"
+    # filepath = f"./data/meta_w10_s5_{sys.argv[1]}.csv"
+    # millisampler = Millisampler(filepath)
+    # main(millisampler, sys.argv[1])
     
-    millisampler = Millisampler(filepath)
+    filepath = f"data/cidds_wk3_processed.csv"
+    cidds = Cidds001(filepath)
+    if sys.argv[1] == 'all':
+        main(cidds, sys.argv[1])
+        sys.exit(0)
     
-    main(millisampler, sys.argv[1])
+    cidds.df = cidds.df.sample(n=int(sys.argv[1]), random_state=42)
+    main(cidds, sys.argv[1])
     sys.exit(0)

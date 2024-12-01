@@ -1,16 +1,74 @@
 from dataclasses import dataclass
 from rich import print as pprint
 import pandas as pd
+import numpy as np
+import sympy as sp
 import json
 import sys
 
-from grammar import Anuta, Bounds
+from grammar import AnutaMilli, Bounds, Anuta, Domain, Kind, Constant
+from known import ip_map, cidds_constants, flag_map, proto_map, cidds_ip_conversion
+from utils import log, save_constraints
 
 
 class Constructor(object):
     def __init__(self) -> None:
         self.df: pd.DataFrame = None
-        self.anuta: Anuta = None
+        self.anuta: AnutaMilli | Anuta = None
+        
+class Cidds001(Constructor):
+    def __init__(self, filepath) -> None:
+        log.info(f"Loading data from {filepath}")
+        self.df = pd.read_csv(filepath)
+        #* Discard the timestamps for now, and Flows is always 1.
+        self.df = self.df.drop(columns=['Date first seen', 'Flows'])
+        #* Convert the Flags and Proto columns to integers        
+        self.df['Flags'] = self.df['Flags'].apply(flag_map)
+        self.df['Proto'] = self.df['Proto'].apply(proto_map)
+        
+        col_to_var = {col: col.replace(' ', '_') for col in self.df.columns}
+        variables = list(col_to_var.values())
+        categorical = ['Flags', 'Proto', 'Src IP Addr', 'Dst IP Addr']
+        
+        domains = {}
+        for col in self.df.columns:
+            var = col_to_var[col]
+            if col not in categorical:
+                domains[var] = Domain(Kind.NUMERICAL, Bounds(self.df[col].min().item(), self.df[col].max().item()), None)
+            else:
+                #& Apply domain knowledge
+                if 'Addr' in col:
+                    self.df[col] = self.df[col].apply(ip_map)
+                domains[var] = Domain(Kind.CATEGORICAL, None, self.df[col].unique())
+        
+        prior_kb = []
+        constants = {}
+        for var in variables:
+            if 'IP' in var:
+                for ip in cidds_ip_conversion.values():
+                    if not ip in domains[var].values:
+                        prior_kb.append(sp.Ne(sp.symbols(var), sp.S(ip)))
+            elif 'Pt' in var:
+                constants[var] = Constant.ASSIGNMENT
+                constants[var].values = cidds_constants['port']
+            elif 'Packet' in var:
+                constants[var] = Constant.SCALAR
+                constants[var].values = cidds_constants['packet']
+                
+        self.anuta = Anuta(variables, domains, constants, prior_kb)
+        pprint(self.anuta.variables)
+        pprint(self.anuta.domains)
+        pprint(self.anuta.constants)
+        print(f"Prior KB size: {len(self.anuta.prior_kb)}:")
+        print(f"\t{self.anuta.prior_kb}\n")
+        
+        self.anuta.populate_kb()
+        # pprint(self.anuta.initial_kb)
+        # save_constraints(self.anuta.initial_kb, 'initial_constraints_arity3_dedupe')
+        print(f"Initial KB size: {len(self.anuta.initial_kb)}")
+        return
+        
+
 
 class Millisampler(Constructor):
     def __init__(self, filepath: str) -> None:
@@ -50,7 +108,7 @@ class Millisampler(Constructor):
         for n, c in canaries.items():
             bounds[n] = Bounds(c[0], c[1])
         
-        self.anuta = Anuta(variables, bounds, constants, operators=[0, 1, 2])
+        self.anuta = AnutaMilli(variables, bounds, constants, operators=[0, 1, 2])
         pprint(self.anuta.variables)
         pprint(self.anuta.constants)
         pprint(self.anuta.bounds)
