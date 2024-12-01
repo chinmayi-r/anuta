@@ -155,6 +155,8 @@ class Anuta(object):
         #^ No ≤ or ≥ constraints for now.
     
     def populate_kb(self) -> None:
+        added = set()
+        num_duplicates = 0
         num_constraints = 0
         num_trivial = 0
         interval_filtered = 0
@@ -169,6 +171,10 @@ class Anuta(object):
                     interval_filtered += 1
                     continue
                 
+                if constraint in added:
+                    num_duplicates += 1
+                    continue
+                added.add(constraint)
                 arity2_constraints.append(constraint)
                 #& Avoid arity-2 AND constraints for now.
                 if type(constraint) != sp.And:
@@ -180,14 +186,21 @@ class Anuta(object):
         log.info(f"Trivial constraints: {num_trivial}")
         log.info(f"Arity-2 constraints: {num_constraints}")
         log.info(f"Interval-filtered constraints: {interval_filtered}")
+        log.info(f"Duplicate arity-2 constraints: {num_duplicates}")
         
         old_num_constraints = num_constraints
+        old_num_duplicates = num_duplicates
         for constraint in self.generate_arity3_constraints(arity2_constraints):
+            if constraint in added:
+                num_duplicates += 1
+                continue
+            added.add(constraint)
             self.initial_kb.append(constraint)
             num_constraints += 1
             if num_constraints % 10_000 == 0:
                 log.info(f"Generated {num_constraints} constraints.")
         log.info(f"Arity-3 constraints: {num_constraints-old_num_constraints}")
+        log.info(f"Duplicate arity-3 constraints: {num_duplicates-old_num_duplicates}")
         
         log.info(f"Populated KB with {len(self.initial_kb)} constraints.\n")
         
