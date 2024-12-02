@@ -41,9 +41,9 @@ def ip_map(ip: str):
     
     if ip == '0.0.0.0':
         new_ip = 'private_any'
-    if ip == '255.255.255.255':
+    elif ip == '255.255.255.255':
         new_ip = 'private_broadcast'
-    if ip == 'DNS':
+    elif ip == 'DNS':
         new_ip = 'dns'
     
     return cidds_ip_conversion[new_ip]

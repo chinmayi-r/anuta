@@ -93,6 +93,8 @@ class Anuta(object):
                             yield sp.And(expr_lhs, expr_rhs)
                             #* ~(Var==const1) AND (Var==const2)
                             yield sp.And(sp.Not(expr_lhs), expr_rhs)
+                            #* (Var==const1) AND ~(Var==const2)
+                            yield sp.And(expr_lhs, sp.Not(expr_rhs))
                             #* ~(Var==const1) AND ~(Var==const2)
                             yield sp.And(sp.Not(expr_lhs), sp.Not(expr_rhs))
                             #^ AND constraints are too restrictive and will be all eliminated.
@@ -103,6 +105,8 @@ class Anuta(object):
                         yield sp.Or(expr_lhs, expr_rhs)
                         #* ~(Var==const1) OR (Var==const2)
                         yield sp.Or(sp.Not(expr_lhs), expr_rhs)
+                        #* (Var==const1) OR ~(Var==const2)
+                        yield sp.Or(expr_lhs, sp.Not(expr_rhs))
                         #* ~(Var==const1) OR ~(Var==const2)
                         yield sp.Or(sp.Not(expr_lhs), sp.Not(expr_rhs))
                 

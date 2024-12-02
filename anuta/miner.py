@@ -94,9 +94,9 @@ def test_cidds_constraints(worker_idx: int, dfpartition: pd.DataFrame) -> List[i
             # print(f"{sat=}")
             # print(f"\t{bool(sat)=}")
             if not sat:
-                # if constraint == sp.And(sp.Eq(anuta.variables['Flags'], 1), sp.Eq(anuta.variables['Proto'], 0)):
-                    # print(f"Violated: {sample['Flags']=}, {sample['Proto']=}")
-                    # pprint(constraint)
+                # if constraint == sp.Or(sp.Eq(anuta.variables['Dst_IP_Addr'], 4), sp.Ne(anuta.variables['Dst_Pt'], 53)):
+                #     print(f"Violated: {assignments['Dst_IP_Addr']=}, {assignments['Dst_Pt']=}")
+                #     pprint(constraint)
                 violations[k] = 1
     log.info(f"Worker {worker_idx+1} finished.")
     return violations

@@ -64,7 +64,7 @@ class Cidds001(Constructor):
         
         self.anuta.populate_kb()
         # pprint(self.anuta.initial_kb)
-        # save_constraints(self.anuta.initial_kb, 'initial_constraints_arity3_full')
+        # save_constraints(self.anuta.initial_kb, 'initial_constraints_arity3_corrected')
         print(f"Initial KB size: {len(self.anuta.initial_kb)}")
         return
         
