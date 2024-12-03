@@ -28,7 +28,8 @@ class Cidds001(Constructor):
         
         col_to_var = {col: col.replace(' ', '_') for col in self.df.columns}
         variables = list(col_to_var.values())
-        categorical = ['Flags', 'Proto', 'Src IP Addr', 'Dst IP Addr']
+        #? Should port be a categorical variable? Sometimes we need range values (i.e., application and dynamic ports).
+        categorical = ['Flags', 'Proto', 'Src IP Addr', 'Dst IP Addr'] + ['Src Pt', 'Dst Pt']
         
         domains = {}
         for col in self.df.columns:
@@ -45,6 +46,10 @@ class Cidds001(Constructor):
         constants = {}
         for var in variables:
             if 'IP' in var:
+                #& Don't need to add the IP constants here, as the domain is small and can be enumerated.
+                # constants[var] = Constant.ASSIGNMENT
+                # constants[var].values = cidds_constants['ip']
+                #* Add the prior knowledge
                 for ip in cidds_ip_conversion.values():
                     if not ip in domains[var].values:
                         prior_kb.append(sp.Ne(sp.symbols(var), sp.S(ip)))
@@ -64,7 +69,7 @@ class Cidds001(Constructor):
         
         self.anuta.populate_kb()
         # pprint(self.anuta.initial_kb)
-        # save_constraints(self.anuta.initial_kb, 'initial_constraints_arity3_corrected')
+        # save_constraints(self.anuta.initial_kb + self.anuta.prior_kb, 'initial_constraints_arity3_negexpr')
         print(f"Initial KB size: {len(self.anuta.initial_kb)}")
         return
         

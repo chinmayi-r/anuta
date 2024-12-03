@@ -52,12 +52,14 @@ class Anuta(object):
     def generate_expressions(self) -> Generator[sp.Expr, None, None]:
         for name, var in self.variables.items():
             if name in self.constants:
-                #* If the var has associated constants, don't enumerate its domain.
+                #* If the var has associated constants, don't enumerate its domain (often too large).
                 match self.constants[name]:
                     case Constant.ASSIGNMENT:
                         for const in self.constants[name].values:
                             #* Var == const
                             yield sp.Eq(var, sp.S(const))
+                            #* Var != const
+                            yield sp.Ne(var, sp.S(const))
                     case Constant.SCALAR:
                         for const in self.constants[name].values:
                             #* Var x const
@@ -66,12 +68,16 @@ class Anuta(object):
                         raise NotImplementedError(f"Unsupported constant: {self.constants[name]}")
             else:
                 domain = self.domains[name]
-                if domain.kind == Kind.NUMERICAL: continue
-                #* Enumerate the domain of a categorical var.
                 if domain.kind == Kind.CATEGORICAL:
+                    #* Enumerate the domain of a categorical var.
                     for value in domain.values:
                         #* Var == value
                         yield sp.Eq(var, sp.S(value))
+                        #* Var != value
+                        yield sp.Ne(var, sp.S(value))
+                if domain.kind == Kind.NUMERICAL: 
+                    #* Omit numerical vars for now.
+                    continue
         
     def generate_arity2_constraints(self) -> Generator[sp.Expr, None, None]:
         #* Arity-1 constraints: self.prior_kb
@@ -79,36 +85,35 @@ class Anuta(object):
         #* Arity-2 constraints:
         expressions = list(self.generate_expressions())
         for i, expr_lhs in enumerate(expressions):
-            if type(expr_lhs) == sp.Equality:
-                #* Starts from the next expression to avoid self-comparison and ordering.
+            if type(expr_lhs) in [sp.Equality, sp.Unequality]:
+                #* Filter self-comparison and ordering.
                 for expr_rhs in expressions[i+1:]:
                     # if expr_lhs == expr_rhs: continue
                     # if expr_lhs.args[0] == expr_rhs.args[0]: continue
-                    
-                    if type(expr_rhs) == sp.Equality:
+                    if type(expr_rhs) in [sp.Equality, sp.Unequality]:
                         
                         #& Avoid (Var==const1) AND (Var==const2)
                         if expr_lhs.args[0] != expr_rhs.args[0]:
                             #* (Var==const1) AND (Var==const2)
                             yield sp.And(expr_lhs, expr_rhs)
-                            #* ~(Var==const1) AND (Var==const2)
-                            yield sp.And(sp.Not(expr_lhs), expr_rhs)
-                            #* (Var==const1) AND ~(Var==const2)
-                            yield sp.And(expr_lhs, sp.Not(expr_rhs))
-                            #* ~(Var==const1) AND ~(Var==const2)
-                            yield sp.And(sp.Not(expr_lhs), sp.Not(expr_rhs))
+                            # #* ~(Var==const1) AND (Var==const2)
+                            # yield sp.And(sp.Not(expr_lhs), expr_rhs)
+                            # #* (Var==const1) AND ~(Var==const2)
+                            # yield sp.And(expr_lhs, sp.Not(expr_rhs))
+                            # #* ~(Var==const1) AND ~(Var==const2)
+                            # yield sp.And(sp.Not(expr_lhs), sp.Not(expr_rhs))
                             #^ AND constraints are too restrictive and will be all eliminated.
-                            #! But, we might need them for arity-3 constraints.
+                            #! But, we need them for arity-3 constraints.
                         
                         #! Do NOT avoid (Var==const1) OR (Var==const2)
                         #* (Var==const1) OR (Var==const2)
                         yield sp.Or(expr_lhs, expr_rhs)
-                        #* ~(Var==const1) OR (Var==const2)
-                        yield sp.Or(sp.Not(expr_lhs), expr_rhs)
-                        #* (Var==const1) OR ~(Var==const2)
-                        yield sp.Or(expr_lhs, sp.Not(expr_rhs))
-                        #* ~(Var==const1) OR ~(Var==const2)
-                        yield sp.Or(sp.Not(expr_lhs), sp.Not(expr_rhs))
+                        # #* ~(Var==const1) OR (Var==const2)
+                        # yield sp.Or(sp.Not(expr_lhs), expr_rhs)
+                        # #* (Var==const1) OR ~(Var==const2)
+                        # yield sp.Or(expr_lhs, sp.Not(expr_rhs))
+                        # #* ~(Var==const1) OR ~(Var==const2)
+                        # yield sp.Or(sp.Not(expr_lhs), sp.Not(expr_rhs))
                 
             elif type(expr_lhs) == sp.Mul:
                 for name, var in self.variables.items():
@@ -155,9 +160,9 @@ class Anuta(object):
                 #! Omit AND constraints for now.
                 # yield sp.And(expression, constraint)
                 yield sp.Or(expression, constraint)
-                yield sp.Or(sp.Not(expression), constraint)
+                # yield sp.Or(sp.Not(expression), constraint)
                 yield sp.Or(expression, sp.Not(constraint))
-                yield sp.Or(sp.Not(expression), sp.Not(constraint))
+                # yield sp.Or(sp.Not(expression), sp.Not(constraint))
         #^ No ≤ or ≥ constraints for now.
     
     def populate_kb(self) -> None:
@@ -198,6 +203,7 @@ class Anuta(object):
         old_num_duplicates = num_duplicates
         for constraint in self.generate_arity3_constraints(arity2_constraints):
             if constraint in added:
+                #* Dedupe for cases like (A | B | C == C | B | A)
                 num_duplicates += 1
                 continue
             added.add(constraint)
