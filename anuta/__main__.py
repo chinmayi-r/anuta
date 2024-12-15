@@ -21,8 +21,8 @@ import json
 anuta : AnutaMilli = None
 
     
-def main(constructor: Constructor, label: str):
-    miner(constructor, label)
+def main(constructor: Constructor, limit: int):
+    miner(constructor, limit)
     
 
 if __name__ == '__main__':
@@ -33,10 +33,13 @@ if __name__ == '__main__':
     
     filepath = f"data/cidds_wk3_processed.csv"
     cidds = Cidds001(filepath)
+    limit = 0
     if sys.argv[1] == 'all':
-        main(cidds, sys.argv[1])
-        sys.exit(0)
+        limit = cidds.df.shape[0]
+        # main(cidds, sys.argv[1])
+        # sys.exit(0)
     
-    cidds.df = cidds.df.sample(n=int(sys.argv[1]), random_state=42)
-    main(cidds, sys.argv[1])
+    # cidds.df = cidds.df.sample(n=int(sys.argv[1]), random_state=42)
+    limit = int(sys.argv[1])
+    main(cidds, limit)
     sys.exit(0)

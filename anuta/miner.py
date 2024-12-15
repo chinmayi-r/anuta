@@ -1,3 +1,4 @@
+from collections import defaultdict
 from rich import print as pprint
 from time import perf_counter
 from multiprocess import Pool
@@ -66,7 +67,13 @@ def test_millisampler_constraints(worker_idx: int, dfpartition: pd.DataFrame) ->
     log.info(f"Worker {worker_idx+1} finished.")
     return violations
 
-def test_cidds_constraints(worker_idx: int, dfpartition: pd.DataFrame) -> List[int]:
+def test_cidds_constraints(
+        worker_idx: int, dfpartition: pd.DataFrame, 
+        indexset: dict[str, dict[str, np.ndarray]], 
+        fcount: dict[str, dict[str, int]], 
+        limit: int,
+        #^ limit ≤ len(dfpartition)
+    ) -> List[int]:
     global anuta
     assert anuta, "anuta is not initialized."
     
@@ -75,14 +82,45 @@ def test_cidds_constraints(worker_idx: int, dfpartition: pd.DataFrame) -> List[i
     log.info(f"Worker {worker_idx+1} started.")
     #* 1: Violated, 0: Not violated
     violations = [0 for _ in range(len(anuta.initial_kb))]
+    exhausted_values = defaultdict(list)
+    exhausted_values[f"Worker {worker_idx}"] = 'Exhausted Domain Values'
     
-    for _, sample in tqdm(dfpartition.iterrows(), total=len(dfpartition)):
+    for i in tqdm(range(limit), total=limit):
+        indexed_vars = list(fcount.keys())
+        #^ Get the vars at every iteration to account for the changes in the indexset.
+        #* Cycle through the vars, treating them equally (no bias).
+        nxt_var = indexed_vars[i % len(indexed_vars)]
+        #* Find the least frequent value of the next variable.
+        least_freq_val = min(fcount[nxt_var], key=fcount[nxt_var].get)
+        #* Get the 1st from the indices of least frequent value (inductive bias).
+        # if not least_freq_val in indexset[nxt_var]:
+        #     log.error(f"Value {least_freq_val=} not in {nxt_var=}.")
+        #TODO: Choose randomly from the indices?
+        indices = indexset[nxt_var][least_freq_val]
+        #^ Somehow ndarray passes by value (unlike list) ...
+        index, indexset[nxt_var][least_freq_val] = indices[0], indices[1: ]
+        if indexset[nxt_var][least_freq_val].size == 0:
+            #* Remove the corresponding counter if the value is exhausted 
+            #* to prevent further sampling (from empty sets).
+            # log.info(f"Exhausted {nxt_var}={least_freq_val}.")
+            del fcount[nxt_var][least_freq_val]
+            # del indexset[nxt_var][least_freq_val]
+            exhausted_values[nxt_var].append(least_freq_val)
+            if not fcount[nxt_var]:
+                # log.info(f"Exhausted all values of {nxt_var}.")
+                del fcount[nxt_var]
+                # del indexset[nxt_var]
+        
+        sample = dfpartition.iloc[index]
         assignments = {}
         for name, val in sample.items():
-            name = name.replace(' ', '_')
             var = anuta.variables.get(name)
             if not var: continue
             assignments[var] = val
+            
+            #* Increment the frequency count of the value of the var.
+            if name in fcount and val in fcount[name]:
+                fcount[name][val] += 1
         
         # pprint(assignments)
         for k, constraint in enumerate(anuta.initial_kb):
@@ -98,22 +136,29 @@ def test_cidds_constraints(worker_idx: int, dfpartition: pd.DataFrame) -> List[i
                 #     print(f"Violated: {assignments['Dst_IP_Addr']=}, {assignments['Dst_Pt']=}")
                 #     pprint(constraint)
                 violations[k] = 1
+        
     log.info(f"Worker {worker_idx+1} finished.")
+    # pprint(fcount)
+    pprint(exhausted_values)
     return violations
 
 
-def miner(constructor: Constructor, label: str):
+def miner(constructor: Constructor, limit: int = 0):
     global anuta
+    label = str(limit)
     anuta = constructor.anuta
     start = perf_counter()
     
     #* Prepare arguments for parallel processing
     core_count = psutil.cpu_count()
+    log.info(f"Spawning {core_count} workers ...")
     # mutex = Manager().Lock()
     dfpartitions = [df.reset_index(drop=True) for df in np.array_split(constructor.df, core_count)]
-    args = [(i, df) for i, df in enumerate(dfpartitions)]
-
-    # Use multiprocessing Pool to test constraints in parallel
+    indexsets, fcounts = zip(*[constructor.get_indexset_and_counter(df) for df in dfpartitions])
+    args = [(i, df, indexset, fcount, limit//core_count) 
+            for i, (df, indexset, fcount) in enumerate(zip(dfpartitions, indexsets, fcounts))]
+    pprint(fcounts[0])
+    
     print(f"Testing constraints in parallel ...")
     pool = Pool(core_count)
     # violation_indices, bounds_array = pool.starmap(test_constraints, args)
@@ -124,6 +169,7 @@ def miner(constructor: Constructor, label: str):
     # pool.close()
 
     log.info(f"All workers finished.")
+    
     aggregated_violations = np.logical_or.reduce(violation_indices)
     # aggregated_bounds = {k: IntBounds(sys.maxsize, 0) for k in anuta.bounds.keys()}
     learned_kb = []

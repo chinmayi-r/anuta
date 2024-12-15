@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from rich import print as pprint
+from collections import defaultdict
 import pandas as pd
 import numpy as np
 import sympy as sp
@@ -15,6 +16,11 @@ class Constructor(object):
     def __init__(self) -> None:
         self.df: pd.DataFrame = None
         self.anuta: AnutaMilli | Anuta = None
+    
+    def get_indexset_and_counter(
+            self, df: pd.DataFrame
+        ) -> tuple[dict[str, dict[str, np.ndarray]], dict[str, dict[str, int]]]:
+        pass
         
 class Cidds001(Constructor):
     def __init__(self, filepath) -> None:
@@ -25,25 +31,27 @@ class Cidds001(Constructor):
         #* Convert the Flags and Proto columns to integers        
         self.df['Flags'] = self.df['Flags'].apply(flag_map)
         self.df['Proto'] = self.df['Proto'].apply(proto_map)
+        #? Should port be a categorical variable? Sometimes we need range values (i.e., application and dynamic ports).
+        self.categorical = ['Flags', 'Proto', 'Src_IP_Addr', 'Dst_IP_Addr'] + ['Src_Pt', 'Dst_Pt']
         
         col_to_var = {col: col.replace(' ', '_') for col in self.df.columns}
-        variables = list(col_to_var.values())
-        #? Should port be a categorical variable? Sometimes we need range values (i.e., application and dynamic ports).
-        categorical = ['Flags', 'Proto', 'Src IP Addr', 'Dst IP Addr'] + ['Src Pt', 'Dst Pt']
+        self.df.rename(columns=col_to_var, inplace=True)
+        variables = list(self.df.columns)
         
         domains = {}
-        for col in self.df.columns:
-            var = col_to_var[col]
-            if col not in categorical:
-                domains[var] = Domain(Kind.NUMERICAL, Bounds(self.df[col].min().item(), self.df[col].max().item()), None)
+        for var in self.df.columns:
+            if var not in self.categorical:
+                domains[var] = Domain(Kind.NUMERICAL, 
+                                      Bounds(self.df[var].min().item(), 
+                                             self.df[var].max().item()), None)
             else:
                 #& Apply domain knowledge
-                if 'Addr' in col:
-                    self.df[col] = self.df[col].apply(ip_map)
-                domains[var] = Domain(Kind.CATEGORICAL, None, self.df[col].unique())
+                if 'Addr' in var:
+                    self.df[var] = self.df[var].apply(ip_map)
+                domains[var] = Domain(Kind.CATEGORICAL, None, self.df[var].unique())
         
         prior_kb = []
-        constants = {}
+        self.constants = {}
         for var in variables:
             if 'IP' in var:
                 #& Don't need to add the IP constants here, as the domain is small and can be enumerated.
@@ -54,13 +62,13 @@ class Cidds001(Constructor):
                     if not ip in domains[var].values:
                         prior_kb.append(sp.Ne(sp.symbols(var), sp.S(ip)))
             elif 'Pt' in var:
-                constants[var] = Constant.ASSIGNMENT
-                constants[var].values = cidds_constants['port']
+                self.constants[var] = Constant.ASSIGNMENT
+                self.constants[var].values = cidds_constants['port']
             elif 'Packet' in var:
-                constants[var] = Constant.SCALAR
-                constants[var].values = cidds_constants['packet']
+                self.constants[var] = Constant.SCALAR
+                self.constants[var].values = cidds_constants['packet']
                 
-        self.anuta = Anuta(variables, domains, constants, prior_kb)
+        self.anuta = Anuta(variables, domains, self.constants, prior_kb)
         pprint(self.anuta.variables)
         pprint(self.anuta.domains)
         pprint(self.anuta.constants)
@@ -72,6 +80,31 @@ class Cidds001(Constructor):
         # save_constraints(self.anuta.initial_kb + self.anuta.prior_kb, 'initial_constraints_arity3_negexpr')
         print(f"Initial KB size: {len(self.anuta.initial_kb)}")
         return
+    
+    def get_indexset_and_counter(
+            self, df: pd.DataFrame
+        ) -> tuple[dict[str, dict[str, np.ndarray]], dict[str, dict[str, int]]]:
+        indexset = {}
+        #^ dict[var: dict[val: array(indices)]]
+        for cat in self.categorical:
+            #TODO: Create index set also for numerical variables.
+            indexset[cat] = df.groupby(by=cat).indices
+        
+        fcount = defaultdict(dict)
+        #^ dict[var: dict[val: count]]
+        for cat in indexset:
+            if cat in self.constants:
+                #* Don't enumerate the domain if it has associated constants.
+                values = self.constants[cat].values
+            else:
+                values = indexset[cat].keys()
+            
+            for val in values:
+                #! Some values could be in the constants but not in the data (partition).
+                if val in indexset[cat]:
+                    fcount[cat] |= {val: 0} if type(val) == int else {val.item(): 0}
+                
+        return indexset, fcount
         
 
 

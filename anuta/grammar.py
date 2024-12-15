@@ -88,32 +88,24 @@ class Anuta(object):
             if type(expr_lhs) in [sp.Equality, sp.Unequality]:
                 #* Filter self-comparison and ordering.
                 for expr_rhs in expressions[i+1:]:
-                    # if expr_lhs == expr_rhs: continue
-                    # if expr_lhs.args[0] == expr_rhs.args[0]: continue
                     if type(expr_rhs) in [sp.Equality, sp.Unequality]:
                         
                         #& Avoid (Var==const1) AND (Var==const2)
                         if expr_lhs.args[0] != expr_rhs.args[0]:
                             #* (Var==const1) AND (Var==const2)
+                            #* ~(Var==const1) AND (Var==const2)
+                            #* (Var==const1) AND ~(Var==const2)
+                            #* ~(Var==const1) AND ~(Var==const2)
                             yield sp.And(expr_lhs, expr_rhs)
-                            # #* ~(Var==const1) AND (Var==const2)
-                            # yield sp.And(sp.Not(expr_lhs), expr_rhs)
-                            # #* (Var==const1) AND ~(Var==const2)
-                            # yield sp.And(expr_lhs, sp.Not(expr_rhs))
-                            # #* ~(Var==const1) AND ~(Var==const2)
-                            # yield sp.And(sp.Not(expr_lhs), sp.Not(expr_rhs))
                             #^ AND constraints are too restrictive and will be all eliminated.
                             #! But, we need them for arity-3 constraints.
                         
                         #! Do NOT avoid (Var==const1) OR (Var==const2)
                         #* (Var==const1) OR (Var==const2)
+                        #* ~(Var==const1) OR (Var==const2)
+                        #* (Var==const1) OR ~(Var==const2)
+                        #* ~(Var==const1) OR ~(Var==const2)
                         yield sp.Or(expr_lhs, expr_rhs)
-                        # #* ~(Var==const1) OR (Var==const2)
-                        # yield sp.Or(sp.Not(expr_lhs), expr_rhs)
-                        # #* (Var==const1) OR ~(Var==const2)
-                        # yield sp.Or(expr_lhs, sp.Not(expr_rhs))
-                        # #* ~(Var==const1) OR ~(Var==const2)
-                        # yield sp.Or(sp.Not(expr_lhs), sp.Not(expr_rhs))
                 
             elif type(expr_lhs) == sp.Mul:
                 for name, var in self.variables.items():
@@ -187,6 +179,7 @@ class Anuta(object):
                     continue
                 added.add(constraint)
                 arity2_constraints.append(constraint)
+                #^ Collect arity-2 constraints for creating arity-3 constraints.
                 #& Avoid arity-2 AND constraints for now.
                 if type(constraint) != sp.And:
                     self.initial_kb.append(constraint)

@@ -14,9 +14,9 @@ popular_ports = [
 #******************** CIDDS-001 Domain Knowledge ********************
 cidds_ips = ['private_p2p', 'private_broadcast', 'private_any', 'public_p2p', 'dns']
 cidds_ports = [0, 3, 8, 11, 22, 25, 
+               53, 67, 68, 80, 123, 137, 138, 443, 8080]
             #    23, #* Telnet
             #    8000, #* Seafile Server
-               53, 67, 68, 80, 123, 137, 138, 443, 8080]
 cidds_constants = {
 	'ip': cidds_ips,
 	'port': cidds_ports,
