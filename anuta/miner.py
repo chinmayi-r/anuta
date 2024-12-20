@@ -10,7 +10,7 @@ import sympy as sp
 import psutil
 
 from grammar import AnutaMilli, Anuta
-from constructor import Constructor
+from constructor import Constructor, DomainCounter
 from utils import log, save_constraints
 
 
@@ -70,7 +70,7 @@ def test_millisampler_constraints(worker_idx: int, dfpartition: pd.DataFrame) ->
 def test_cidds_constraints(
         worker_idx: int, dfpartition: pd.DataFrame, 
         indexset: dict[str, dict[str, np.ndarray]], 
-        fcount: dict[str, dict[str, int]], 
+        fcount: dict[str, dict[str, DomainCounter]], 
         limit: int,
         #^ limit ≤ len(dfpartition)
     ) -> List[int]:
@@ -86,15 +86,14 @@ def test_cidds_constraints(
     exhausted_values[f"Worker {worker_idx}"] = 'Exhausted Domain Values'
     
     for i in tqdm(range(limit), total=limit):
+        '''Domain Counting'''
         indexed_vars = list(fcount.keys())
         #^ Get the vars at every iteration to account for the changes in the indexset.
         #* Cycle through the vars, treating them equally (no bias).
         nxt_var = indexed_vars[i % len(indexed_vars)]
         #* Find the least frequent value of the next variable.
         least_freq_val = min(fcount[nxt_var], key=fcount[nxt_var].get)
-        #* Get the 1st from the indices of least frequent value (inductive bias).
-        # if not least_freq_val in indexset[nxt_var]:
-        #     log.error(f"Value {least_freq_val=} not in {nxt_var=}.")
+        #& Get the 1st from the indices of least frequent value (inductive bias).
         #TODO: Choose randomly from the indices?
         indices = indexset[nxt_var][least_freq_val]
         #^ Somehow ndarray passes by value (unlike list) ...
@@ -120,7 +119,7 @@ def test_cidds_constraints(
             
             #* Increment the frequency count of the value of the var.
             if name in fcount and val in fcount[name]:
-                fcount[name][val] += 1
+                fcount[name][val].count += 1
         
         # pprint(assignments)
         for k, constraint in enumerate(anuta.initial_kb):
@@ -129,12 +128,7 @@ def test_cidds_constraints(
                 continue
             #* Evaluate the constraint with the given assignments
             sat = constraint.subs(assignments)
-            # print(f"{sat=}")
-            # print(f"\t{bool(sat)=}")
             if not sat:
-                # if constraint == sp.Or(sp.Eq(anuta.variables['Dst_IP_Addr'], 4), sp.Ne(anuta.variables['Dst_Pt'], 53)):
-                #     print(f"Violated: {assignments['Dst_IP_Addr']=}, {assignments['Dst_Pt']=}")
-                #     pprint(constraint)
                 violations[k] = 1
         
     log.info(f"Worker {worker_idx+1} finished.")

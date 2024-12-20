@@ -23,7 +23,7 @@ set -x
     sudo apt install htop -y
     git config --global credential.helper store
 
-    unzip data/meta.zip -d data/
+    unzip data/meta.zip -d data
 
     exit 0
 }
