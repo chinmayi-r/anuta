@@ -1,4 +1,5 @@
-# from bidict import bidict
+from bidict import bidict
+
 
 popular_ports = [
     # TCP Ports
@@ -24,9 +25,14 @@ cidds_constants = {
 }
 
 #* Map strings to integers
-cidds_ip_conversion = {ip: i for i, ip in enumerate(cidds_ips)}
-cidds_flags_conversion = {flag: i for i, flag in enumerate(['noflags', 'flags'])}
-cidds_proto_conversion = {proto: i for i, proto in enumerate(['TCP', 'UDP', 'ICMP', 'IGMP'])}
+cidds_ip_conversion = bidict({ip: i for i, ip in enumerate(cidds_ips)})
+cidds_flags_conversion = bidict({flag: i for i, flag in enumerate(['noflags', 'flags'])})
+cidds_proto_conversion = bidict({proto: i for i, proto in enumerate(['TCP', 'UDP', 'ICMP', 'IGMP'])})
+cidds_conversions = {
+    'ip': cidds_ip_conversion,
+    'flags': cidds_flags_conversion,
+    'proto': cidds_proto_conversion
+}
 
 def proto_map(proto: str):
 	return cidds_proto_conversion[proto]

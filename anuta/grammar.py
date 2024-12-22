@@ -50,6 +50,8 @@ class Anuta(object):
         self.learned_kb = []
     
     def generate_expressions(self) -> Generator[sp.Expr, None, None]:
+        """Generate expressions of a single atom (arity-1).
+        """
         for name, var in self.variables.items():
             if name in self.constants:
                 #* If the var has associated constants, don't enumerate its domain (often too large).
@@ -76,7 +78,7 @@ class Anuta(object):
                         #* Var != value
                         yield sp.Ne(var, sp.S(value))
                 if domain.kind == Kind.NUMERICAL: 
-                    #* Omit numerical vars for now.
+                    #* Omit numerical vars w/o associated constants for now.
                     continue
         
     def generate_arity2_constraints(self) -> Generator[sp.Expr, None, None]:

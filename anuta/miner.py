@@ -11,6 +11,7 @@ import psutil
 
 from grammar import AnutaMilli, Anuta
 from constructor import Constructor, DomainCounter
+from model import Model
 from utils import log, save_constraints
 
 
@@ -186,7 +187,7 @@ def miner(constructor: Constructor, limit: int = 0):
     removed_count = len(anuta.initial_kb) - len(learned_kb)
     # pprint(aggregated_bounds)
     print(f"{len(learned_kb)=}, {len(anuta.initial_kb)=} ({removed_count=})")
-    save_constraints(learned_kb + anuta.prior_kb, f'learned_{label}')
+    Model.save_constraints(learned_kb + anuta.prior_kb, f'learned_{label}')
     print(f"Learning time: {end-start:.2f}s\n\n")
     
     if len(learned_kb) > 200: 
@@ -207,4 +208,4 @@ def miner(constructor: Constructor, limit: int = 0):
     print(f"Pruning time: {end-start:.2f}s\n\n")
     
     anuta.learned_kb = reduced_kb + anuta.prior_kb
-    save_constraints(anuta.learned_kb, f'reduced_{label}')
+    Model.save_constraints(anuta.learned_kb, f'reduced_{label}')
