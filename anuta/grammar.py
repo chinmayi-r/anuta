@@ -67,34 +67,32 @@ class Anuta(object):
             
     def propose_new_candidates(self) -> None:
         # pprint("\tEntered propose_new_candidates()")
+        #* Set for dedupe.
+        new_candidates: Set[Constraint] = set()
         if self.search_arity == 1:
-            atoms: List[Constraint] = []
-            #* Generate arity-1 constraints.
-            for atom in self.generate_arity1_constraints():
-                atoms.append(atom)
+            literals: List[Constraint] = []
+            #* Generate the shortest (most specific) constraints.
+            for composition in self.generate_arity1_constraints():
+                literals.append(composition)
             log.info(f"Prior size: {len(self.prior)}")
-                
-            for premise in atoms:
-                for conclusion in atoms:
+            
+            for premise in literals:
+                for conclusion in literals:
                     #* X=>X is trivial.
                     if premise == conclusion: continue
                     #* (X=10) => (X=20) is trivial.
                     if premise.expr.args[0] == conclusion.expr.args[0]: continue
                     #* (A => B), (B => A)
                     candidate = Constraint(sp.Implies(premise.expr, conclusion.expr))
-                    # candidate.ancestors = set([premise, conclusion])
                     #^ Don't learn arity-1 ancestors as they are domain prior.
                     assert type(candidate.expr) == sp.Implies, (
                         f"Candidate {candidate} is not an implication.")
-                    self.candidates.append(candidate)
-                    self.num_candidates_proposed += 1
+                    new_candidates.add(candidate)
             self.search_arity = 2
-            log.info(f"Proposed {len(self.candidates)} arity-2 constraints.")
-            pprint(self.candidates[:5])
         else:
             self.search_arity += 1
             new_candidates: Set[Constraint] = set()
-            parent_candidates: Set[Constraint] = set()
+            # stem_candidates: Set[Constraint] = set()
             #* Generate higher-arity constraints given candidates survived the previous round.
             for candidate1 in self.candidates:
                 # assert type(candidate1.expr) == sp.Implies, (
@@ -114,37 +112,38 @@ class Anuta(object):
                     # if sp.Equivalent(desugar(premise1), desugar(premise2)):
                     #^ Equivalence check is expensive.
                     if premise1 == premise2:
-                        #* (A=>B)+(A=>C) -> (A => (B & C))
-                        atom = Constraint(premise1.expr >> (conclusion1.expr & conclusion2.expr))
-                        if atom not in new_candidates:
-                            atom.ancestors = set([candidate1, candidate2])
-                            parent_candidates |= atom.ancestors
-                            new_candidates.add(atom)
-                            self.num_candidates_proposed += 1
+                        #* Specific: (A=>B)+(A=>C) -> More general: (A => (B | C))
+                        composition = Constraint(premise1.expr >> (conclusion1.expr | conclusion2.expr))
+                        # if composition not in new_candidates:
+                            # composition.ancestors = set([candidate1, candidate2])
+                            # stem_candidates |= composition.ancestors
+                        new_candidates.add(composition)
+                            # self.num_candidates_proposed += 1
                     # elif sp.Equivalent(desugar(conclusion1), desugar(conclusion2)):
                     elif conclusion1 == conclusion2:
-                        #* (A=>B)+(C=>B) -> ((A | C) => B)
-                        atom = Constraint((premise1.expr | premise2.expr) >> conclusion1.expr)
-                        if atom not in new_candidates:
-                            atom.ancestors = set([candidate1, candidate2])
-                            parent_candidates |= atom.ancestors
-                            new_candidates.add(atom)
-                            self.num_candidates_proposed += 1
+                        #* Specific: (A=>B)+(C=>B) -> More general: ((A & C) => B)
+                        composition = Constraint((premise1.expr & premise2.expr) >> conclusion1.expr)
+                        # if composition not in new_candidates:
+                            # composition.ancestors = set([candidate1, candidate2])
+                            # stem_candidates |= composition.ancestors
+                        new_candidates.add(composition)
+                            # self.num_candidates_proposed += 1
                     # else:
                     #     log.info(f"Unpaired candidates: {candidate1}, {candidate2}")
                     
-                    if len(new_candidates) % 1000 == 0 and len(new_candidates) > cur_ncandidates:
+                    if len(new_candidates) % 5000 == 0 and len(new_candidates) > cur_ncandidates:
                         log.info(f"Proposed {len(new_candidates)} arity-{self.search_arity} constraints.")
             #> End of candidate generation  
               
-            unpaired_candidates = [c for c in self.candidates if c not in parent_candidates]
-            #& Unpaired but tested candidates are learned.
-            self.kb |= set(unpaired_candidates)
-            log.info(f"Learned {len(unpaired_candidates)} unpaired constraints.")
+            # unpaired_candidates = [c for c in self.candidates if c not in stem_candidates]
+            # #& Unpaired but tested candidates are learned.
+            # self.kb |= set(unpaired_candidates)
+            # log.info(f"Learned {len(unpaired_candidates)} unpaired constraints.")
             
-            self.candidates = list(new_candidates)
-            log.info(f"Total {len(self.candidates)} arity-{self.search_arity} constraints proposed.")
-            
+        self.num_candidates_proposed += len(new_candidates)
+        self.candidates = list(new_candidates)
+        log.info(f"Proposed {len(self.candidates)} arity-{self.search_arity} constraints.\nFirst a few:")
+        pprint(self.candidates[:5])
         return
 
     
@@ -333,7 +332,7 @@ class Anuta(object):
                 #^ Collect arity-2 constraints for creating arity-3 constraints.
                 #& Avoid arity-2 AND constraints for now.
                 if type(constraint) != sp.And:
-                    self.initial_kb.append(constraint)
+                    self.candidates.append(constraint)
                 
                 num_constraints += 1
                 if num_constraints % 10_000 == 0:
@@ -351,14 +350,14 @@ class Anuta(object):
                 num_duplicates += 1
                 continue
             added.add(constraint)
-            self.initial_kb.append(constraint)
+            self.candidates.append(constraint)
             num_constraints += 1
             if num_constraints % 10_000 == 0:
                 log.info(f"Generated {num_constraints} constraints.")
         log.info(f"Arity-3 constraints: {num_constraints-old_num_constraints}")
         log.info(f"Duplicate arity-3 constraints: {num_duplicates-old_num_duplicates}")
         
-        log.info(f"Populated KB with {len(self.initial_kb)} constraints.\n")
+        log.info(f"Populated KB with {len(self.candidates)} constraints.\n")
         
         #! Too expansive, and the reduction is little (26/149720)
         # log.info(f"Filtering redundant constraints ...")

@@ -12,7 +12,7 @@ from copy import deepcopy
 from time import perf_counter
 
 from constructor import Constructor, Millisampler, Cidds001
-from miner import miner
+from miner import miner_levelwise
 from utils import log, save_constraints
 import json
 import warnings
@@ -20,7 +20,7 @@ warnings.filterwarnings("ignore")
 
     
 def main(constructor: Constructor, limit: int):
-    miner(constructor, limit)
+    miner_levelwise(constructor, limit)
     
 
 if __name__ == '__main__':

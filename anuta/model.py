@@ -13,7 +13,7 @@ class Constraint(object):
         # super().__init__()
         #* Keep the original (sugared) expression for readability.
         self.expr: sp.Expr = expr
-        self.ancestors: Set['Constraint'] = set()
+        # self.ancestors: Set['Constraint'] = set()
         self.id = hash(sp.srepr(desugar(self.expr)))
         
     def __hash__(self) -> int:
@@ -21,6 +21,7 @@ class Constraint(object):
         return self.id
     
     def __eq__(self, another: 'Constraint') -> bool:
+        assert isinstance(another, Constraint), "Can only compare with another 'Constraint'."
         return self.id == another.id
     
     def __repr__(self) -> str:
