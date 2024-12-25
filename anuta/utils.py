@@ -51,3 +51,6 @@ def load_constraints(fname: str='constraints'):
         for line in f:
             constraints.append(sp.sympify(line.strip()))
     return constraints
+
+def desugar(expr: sp.Expr) -> sp.Expr:
+    return sp.simplify_logic(expr, form='dnf', deep=True)

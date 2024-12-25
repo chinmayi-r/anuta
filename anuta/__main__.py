@@ -11,14 +11,12 @@ from typing import *
 from copy import deepcopy
 from time import perf_counter
 
-from grammar import AnutaMilli
 from constructor import Constructor, Millisampler, Cidds001
 from miner import miner
 from utils import log, save_constraints
 import json
-
-
-anuta : AnutaMilli = None
+import warnings
+warnings.filterwarnings("ignore")
 
     
 def main(constructor: Constructor, limit: int):

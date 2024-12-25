@@ -7,7 +7,7 @@ import sympy as sp
 import json
 import sys
 
-from grammar import AnutaMilli, Bounds, Anuta, Domain, Kind, Constant
+from grammar import AnutaMilli, Bounds, Anuta, Domain, Kind, ConstantType, Constants
 from known import ip_map, cidds_constants, flag_map, proto_map, cidds_ip_conversion
 from utils import log, save_constraints, to_big_camelcase
 
@@ -59,8 +59,9 @@ class Constructor(object):
         self.anuta: AnutaMilli | Anuta = None
     
     def get_indexset_and_counter(
-            self, df: pd.DataFrame
-        ) -> tuple[dict[str, dict[str, np.ndarray]], dict[str, dict[str, int]]]:
+            self, df: pd.DataFrame,
+            domains: dict[str, Domain],
+        ) -> tuple[dict[str, dict[str, np.ndarray]], dict[str, DomainCounter]]:
         pass
         
 class Cidds001(Constructor):
@@ -69,45 +70,50 @@ class Cidds001(Constructor):
         self.df = pd.read_csv(filepath)
         #* Discard the timestamps for now, and Flows is always 1.
         self.df = self.df.drop(columns=['Date first seen', 'Flows'])
-        #* Convert the Flags and Proto columns to integers        
-        self.df['Flags'] = self.df['Flags'].apply(flag_map)
-        self.df['Proto'] = self.df['Proto'].apply(proto_map)
-        #? Should port be a categorical variable? Sometimes we need range values (i.e., application and dynamic ports).
-        self.categorical = ['Flags', 'Proto', 'SrcIpAddr', 'DstIpAddr'] + ['SrcPt', 'DstPt']
-        
         col_to_var = {col: to_big_camelcase(col) for col in self.df.columns}
         self.df.rename(columns=col_to_var, inplace=True)
         variables = list(self.df.columns)
+        
+        #* Convert the Flags and Proto columns to integers        
+        self.df['Flags'] = self.df['Flags'].apply(flag_map)
+        self.df['Proto'] = self.df['Proto'].apply(proto_map)
+        for var in ['SrcIpAddr', 'DstIpAddr']:
+            self.df[var] = self.df[var].apply(ip_map)
+        #? Should port be a categorical variable? Sometimes we need range values (i.e., application and dynamic ports).
+        self.categorical = ['Flags', 'Proto', 'SrcIpAddr', 'DstIpAddr'] + ['SrcPt', 'DstPt']
         
         domains = {}
         for var in self.df.columns:
             if var not in self.categorical:
                 domains[var] = Domain(Kind.NUMERICAL, 
                                       Bounds(self.df[var].min().item(), 
-                                             self.df[var].max().item()), None)
+                                             self.df[var].max().item()), 
+                                      None)
             else:
-                #& Apply domain knowledge
-                if 'Addr' in var:
-                    self.df[var] = self.df[var].apply(ip_map)
-                domains[var] = Domain(Kind.CATEGORICAL, None, self.df[var].unique())
+                domains[var] = Domain(Kind.CATEGORICAL, 
+                                      None, 
+                                      self.df[var].unique())
         
+        #* Add the constants associated with the vars.
         prior_kb = []
-        self.constants = {}
+        self.constants: dict[str, Constants] = {}
         for var in variables:
             if 'ip' in var.lower():
                 #& Don't need to add the IP constants here, as the domain is small and can be enumerated.
-                # constants[var] = Constant.ASSIGNMENT
-                # constants[var].values = cidds_constants['ip']
-                #* Add the prior knowledge
-                for ip in cidds_ip_conversion.values():
-                    if not ip in domains[var].values:
-                        prior_kb.append(sp.Ne(sp.symbols(var), sp.S(ip)))
+                self.constants[var] = Constants(
+                    ctype=ConstantType.ASSIGNMENT,
+                    values=cidds_constants['ip']
+                )
             elif 'pt' in var.lower():
-                self.constants[var] = Constant.ASSIGNMENT
-                self.constants[var].values = cidds_constants['port']
+                self.constants[var] = Constants(
+                    ctype=ConstantType.ASSIGNMENT,
+                    values=cidds_constants['port']
+                )
             elif 'packet' in var.lower():
-                self.constants[var] = Constant.SCALAR
-                self.constants[var].values = cidds_constants['packet']
+                self.constants[var] = Constants(
+                    ctype=ConstantType.SCALAR,
+                    values=cidds_constants['packet']
+                )
                 
         self.anuta = Anuta(variables, domains, self.constants, prior_kb)
         pprint(self.anuta.variables)
@@ -116,20 +122,27 @@ class Cidds001(Constructor):
         print(f"Prior KB size: {len(self.anuta.prior_kb)}:")
         print(f"\t{self.anuta.prior_kb}\n")
         
-        self.anuta.populate_kb()
+        # self.anuta.populate_kb()
         # pprint(self.anuta.initial_kb)
         # save_constraints(self.anuta.initial_kb + self.anuta.prior_kb, 'initial_constraints_arity3_negexpr')
         print(f"Initial KB size: {len(self.anuta.initial_kb)}")
         return
     
     def get_indexset_and_counter(
-            self, df: pd.DataFrame
-        ) -> tuple[dict[str, dict[str, np.ndarray]], dict[str, dict[str, int]]]:
+            self, df: pd.DataFrame,
+            domains: dict[str, Domain],
+        ) -> tuple[dict[str, dict[str, np.ndarray]], dict[str, DomainCounter]]:
         indexset = {}
         #^ dict[var: dict[val: array(indices)]] // Var -> {Distinct value -> indices}
         for cat in self.categorical:
-            #TODO: Create index set also for numerical variables.
-            indexset[cat] = df.groupby(by=cat).indices
+            indices = df.groupby(by=cat).indices
+            filtered_indices = {}
+            if cat in self.constants:
+                for val in indices:
+                    if val in self.constants[cat].values:
+                        filtered_indices[val] = indices[val]
+            indexset[cat] = filtered_indices
+        #TODO: Create index set also for numerical variables.
         
         fcount = defaultdict(dict)
         #^ dict[var: dict[val: count]] // Var -> {Value of interest -> (count,freq)}
@@ -142,14 +155,22 @@ class Cidds001(Constructor):
             
             for val in values:
                 #! Some values could be in the constants but not in the data (partition).
-                if val in indexset[cat]:
+                if val in domains[cat].values and val in indexset[cat]:
                     #* Initialize the counters to the frequency of the value in the data.
                     #& Prioritize rare values (inductive bias).
                     #& Using the frequency only as a tie-breaker [count, freq].
                     freq = len(indexset[cat][val])
                     dc = DomainCounter(count=0, frequency=freq)
                     fcount[cat] |= {val: dc} if type(val) == int else {val.item(): dc}
-                
+        # for varname, dc in fcounts.items():
+        # domain = anuta.domains.get(varname)
+        # assert domain.kind == Kind.CATEGORICAL, "Found numerical variable in DC counter."
+        
+        # filtered_dc = {}
+        # for key in dc:
+        #     if key in domain.values:
+        #         filtered_dc |= dc[key]
+        # fcounts[varname] = filtered_dc
         return indexset, fcount
         
 

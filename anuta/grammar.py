@@ -3,8 +3,12 @@ from typing import *
 import sympy as sp
 from dataclasses import dataclass
 from enum import Enum, auto
+from rich import print as pprint
+import warnings
+warnings.filterwarnings("ignore")
 
-from utils import log, consecutive_combinations
+from utils import log, consecutive_combinations, desugar
+from model import Constraint
 
 
 @dataclass
@@ -12,13 +16,17 @@ class Bounds:
     lb: float
     ub: float
 
-class Constant(Enum):
+class ConstantType(Enum):
     ASSIGNMENT = auto()
     SCALAR = auto()
-    #! Abuse of Enum
-    def __init__(self, values: List=None) -> None:
-        super().__init__()
-        self.values = values
+
+@dataclass
+class Constants(object):
+    ctype: ConstantType
+    values: List[int]
+    
+    def __repr__(self) -> str:
+        return f"{self.ctype}, {len(self.values)} constants"
 
 class Kind(Enum):
     NUMERICAL = auto()
@@ -38,16 +46,157 @@ class Operator(Enum):
     
 class Anuta(object):
     def __init__(self, variables: List[str], domains: Dict[str, Domain], 
-                 constants: Dict[str, Tuple[Constant, List[int]]]=None, 
-                 prior_kb: List[sp.Expr]=[]):
+                 constants: Dict[str, Constants]=None, 
+                 prior_kb: List[Constraint]=[]):
         variables = sp.symbols(' '.join(variables))
-        self.variables = {v.name: v for v in variables}
-        self.domains = domains
-        self.constants = constants
+        self.variables: Dict[str, sp.Symbol] = {v.name: v for v in variables}
+        self.domains: Dict[str, Domain] = domains
+        self.constants: Dict[str, Constants] = constants
         
         self.prior_kb = prior_kb
-        self.initial_kb = []
-        self.learned_kb = []
+        self.initial_kb: List[Constraint] = []
+        self.learned_kb: List[Constraint] = []
+        
+        self.prior: Set[Constraint] = set() #* Untested facts.
+        self.kb: Set[Constraint] = set()
+        
+        self.candidates: List[Constraint] = [] #* List for ordered elimination.
+        self.num_candidates_proposed = 0
+        self.num_candidates_rejected = 0
+        self.search_arity = 1
+            
+    def propose_new_candidates(self) -> None:
+        # pprint("\tEntered propose_new_candidates()")
+        if self.search_arity == 1:
+            atoms: List[Constraint] = []
+            #* Generate arity-1 constraints.
+            for atom in self.generate_arity1_constraints():
+                atoms.append(atom)
+            log.info(f"Prior size: {len(self.prior)}")
+                
+            for premise in atoms:
+                for conclusion in atoms:
+                    #* X=>X is trivial.
+                    if premise == conclusion: continue
+                    #* (X=10) => (X=20) is trivial.
+                    if premise.expr.args[0] == conclusion.expr.args[0]: continue
+                    #* (A => B), (B => A)
+                    candidate = Constraint(sp.Implies(premise.expr, conclusion.expr))
+                    # candidate.ancestors = set([premise, conclusion])
+                    #^ Don't learn arity-1 ancestors as they are domain prior.
+                    assert type(candidate.expr) == sp.Implies, (
+                        f"Candidate {candidate} is not an implication.")
+                    self.candidates.append(candidate)
+                    self.num_candidates_proposed += 1
+            self.search_arity = 2
+            log.info(f"Proposed {len(self.candidates)} arity-2 constraints.")
+            pprint(self.candidates[:5])
+        else:
+            self.search_arity += 1
+            new_candidates: Set[Constraint] = set()
+            parent_candidates: Set[Constraint] = set()
+            #* Generate higher-arity constraints given candidates survived the previous round.
+            for candidate1 in self.candidates:
+                # assert type(candidate1.expr) == sp.Implies, (
+                #     f"Candidate {candidate1} is not an implication.")
+                premise1, conclusion1 = candidate1.expr.args
+                premise1 = Constraint(premise1)
+                conclusion1 = Constraint(conclusion1)
+                for candidate2 in self.candidates:
+                    if candidate1 == candidate2: continue
+                    # assert type(candidate2.expr) == sp.Implies, (
+                    #     f"Candidate {candidate2} is not an implication.")
+                    cur_ncandidates = len(new_candidates)
+                    
+                    premise2, conclusion2 = candidate2.expr.args
+                    premise2 = Constraint(premise2)
+                    conclusion2 = Constraint(conclusion2)
+                    # if sp.Equivalent(desugar(premise1), desugar(premise2)):
+                    #^ Equivalence check is expensive.
+                    if premise1 == premise2:
+                        #* (A=>B)+(A=>C) -> (A => (B & C))
+                        atom = Constraint(premise1.expr >> (conclusion1.expr & conclusion2.expr))
+                        if atom not in new_candidates:
+                            atom.ancestors = set([candidate1, candidate2])
+                            parent_candidates |= atom.ancestors
+                            new_candidates.add(atom)
+                            self.num_candidates_proposed += 1
+                    # elif sp.Equivalent(desugar(conclusion1), desugar(conclusion2)):
+                    elif conclusion1 == conclusion2:
+                        #* (A=>B)+(C=>B) -> ((A | C) => B)
+                        atom = Constraint((premise1.expr | premise2.expr) >> conclusion1.expr)
+                        if atom not in new_candidates:
+                            atom.ancestors = set([candidate1, candidate2])
+                            parent_candidates |= atom.ancestors
+                            new_candidates.add(atom)
+                            self.num_candidates_proposed += 1
+                    # else:
+                    #     log.info(f"Unpaired candidates: {candidate1}, {candidate2}")
+                    
+                    if len(new_candidates) % 1000 == 0 and len(new_candidates) > cur_ncandidates:
+                        log.info(f"Proposed {len(new_candidates)} arity-{self.search_arity} constraints.")
+            #> End of candidate generation  
+              
+            unpaired_candidates = [c for c in self.candidates if c not in parent_candidates]
+            #& Unpaired but tested candidates are learned.
+            self.kb |= set(unpaired_candidates)
+            log.info(f"Learned {len(unpaired_candidates)} unpaired constraints.")
+            
+            self.candidates = list(new_candidates)
+            log.info(f"Total {len(self.candidates)} arity-{self.search_arity} constraints proposed.")
+            
+        return
+
+    
+    def generate_arity1_constraints(self) -> Generator[Constraint, None, None]:
+        for name, var in self.variables.items():
+            var_prior = []
+            if name in self.constants:
+                #* If the var has associated constants, don't enumerate its domain (often too large).
+                match self.constants[name].ctype:
+                    case ConstantType.ASSIGNMENT:
+                        for const in self.constants[name].values:
+                            self.num_candidates_proposed += 2
+                            #* Var == const
+                            constraint = Constraint(sp.Eq(var, sp.S(const)))
+                            #* Var != const
+                            neg_constraint = Constraint(sp.Ne(var, sp.S(const)))
+                            #& First-level elimination through domain check.
+                            if const in self.domains[name].values:
+                                #* Learn the constraint as a fact.
+                                var_prior.append(constraint.expr)
+                                yield constraint
+                                yield neg_constraint
+                            else:
+                                log.warning(f"Constant {const} not in domain of {name}.")
+                                #* Learn negation of the constraint as a fact.
+                                #? Is this too strong an assumption? (i.e., this value may occur in other datesets)
+                                var_prior.append(neg_constraint.expr)
+                                self.num_candidates_rejected += 1
+                    case ConstantType.SCALAR:
+                        #^ Omit scalar expressions for now.
+                        pass
+                    case _:
+                        raise NotImplementedError(f"Unsupported constant: {self.constants[name]}")
+            else:
+                domain = self.domains[name]
+                if domain.kind == Kind.CATEGORICAL:
+                    #* Enumerate the domain of a categorical var.
+                    for value in domain.values:
+                        self.num_candidates_proposed += 2
+                        #* Var == value
+                        constraint = Constraint(sp.Eq(var, sp.S(value)))
+                        #* Var != value
+                        neg_constraint = Constraint(sp.Ne(var, sp.S(value)))
+                        
+                        var_prior.append(constraint.expr)
+                        yield constraint
+                        yield neg_constraint
+                if domain.kind == Kind.NUMERICAL: 
+                    #* Omit numerical vars w/o associated constants for now.
+                    continue
+            #* Add the prior knowledge of the var (X=1 | X=2 | ...)
+            self.prior.add(Constraint(sp.Or(*var_prior)))
     
     def generate_expressions(self) -> Generator[sp.Expr, None, None]:
         """Generate expressions of a single atom (arity-1).
@@ -55,14 +204,14 @@ class Anuta(object):
         for name, var in self.variables.items():
             if name in self.constants:
                 #* If the var has associated constants, don't enumerate its domain (often too large).
-                match self.constants[name]:
-                    case Constant.ASSIGNMENT:
+                match self.constants[name].ctype:
+                    case ConstantType.ASSIGNMENT:
                         for const in self.constants[name].values:
                             #* Var == const
                             yield sp.Eq(var, sp.S(const))
                             #* Var != const
                             yield sp.Ne(var, sp.S(const))
-                    case Constant.SCALAR:
+                    case ConstantType.SCALAR:
                         for const in self.constants[name].values:
                             #* Var x const
                             yield sp.Mul(var, sp.S(const))

@@ -18,11 +18,6 @@ cidds_ports = [0, 3, 8, 11, 22, 25,
                53, 67, 68, 80, 123, 137, 138, 443, 8080]
             #    23, #* Telnet
             #    8000, #* Seafile Server
-cidds_constants = {
-	'ip': cidds_ips,
-	'port': cidds_ports,
-	'packet': [42, 64, 65_535], #* MTU
-}
 
 #* Map strings to integers
 cidds_ip_conversion = bidict({ip: i for i, ip in enumerate(cidds_ips)})
@@ -32,6 +27,11 @@ cidds_conversions = {
     'ip': cidds_ip_conversion,
     'flags': cidds_flags_conversion,
     'proto': cidds_proto_conversion
+}
+cidds_constants = {
+	'ip': list(cidds_conversions['ip'].values()),
+	'port': cidds_ports,
+	'packet': [42, 64, 65_535], #* MTU
 }
 
 def proto_map(proto: str):
