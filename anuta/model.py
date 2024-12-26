@@ -2,18 +2,21 @@ import json
 import sympy as sp
 from sympy.logic.inference import satisfiable
 from typing import *
+from rich import print as pprint
+from tqdm import tqdm
 
 from known import cidds_conversions
-from utils import log, desugar
+from utils import log, desugar, is_purely_or
 
 
 class Constraint(object):
     #^ Can't inherit from sympy.Expr as it causes AttributeError on newly defined attributes.
     def __init__(self, expr: sp.Expr):
         # super().__init__()
-        #* Keep the original (sugared) expression for readability.
+        #* Semantic expression: original (sugared) formula for readability.
         self.expr: sp.Expr = expr
         # self.ancestors: Set['Constraint'] = set()
+        #* Use the syntactic model to identify the constraint.
         self.id = hash(sp.srepr(desugar(self.expr)))
         
     def __hash__(self) -> int:
@@ -32,7 +35,8 @@ class Constraint(object):
 
 class Model(object):
     def __init__(self, path_to_constraints: str):
-        self._model = sp.And(*self.load_constraints(path_to_constraints))
+        self.constraints = Model.load_constraints(path_to_constraints)
+        self._model = Model.create(self.constraints)
         
     def interpret(self, constraint: sp.Expr, dataset: str='cidds', reverse=False) -> sp.Expr:
         #TODO: Yield the semantic model the formula given the mappings in domain knowledge.
@@ -40,6 +44,7 @@ class Model(object):
     
     def entails(self, query: str) -> bool:
         query = sp.sympify(query)
+        pprint(query)
         if type(query) == sp.Equivalent:
             #* Needs manual interpretation due to sympy's limitation.
             lhs, rhs = query.args 
@@ -56,6 +61,21 @@ class Model(object):
         #* If the negation is not satisfiable (i.e., there is no interpretation
         #* KB is true but query is false), then the entailment holds.
         return not any(sats)
+    
+    @staticmethod
+    def create(constraints: List[sp.Expr|Constraint] | Set[sp.Expr|Constraint]) -> 'Model':
+        log.info("Creating model...")
+        constraints = list(constraints)
+        if type(constraints[0]) == Constraint:
+            constraints = [constraint.expr for constraint in constraints]
+        
+        simplified = []
+        for constraint in tqdm(constraints):
+            # simplified.append(constraint)
+            #! To create syntactic model from semantic constraints, we must desugar them.
+            #* Semantic land -> Syntactic land
+            simplified.append(desugar(constraint))
+        return sp.And(*simplified)
     
     @staticmethod
     def save_constraints(constraints: List[sp.Expr]|Set[sp.Expr], path: str='constraints.rule'):
@@ -77,7 +97,14 @@ class Model(object):
     def load_constraints(path: str='constraints.rule'):
         constraints = []
         with open(f"{path}", 'r') as f:
-            for line in f:
-                constraints.append(sp.sympify(line.strip()))
-        log.info(f"Constraints loaded from {path}")
+            for i, line in enumerate(f):
+                expr = sp.sympify(line.strip())
+                # if not is_purely_or(expr):
+                #     constraints.append(expr)
+                #     print(f"Loaded {i+1} constraints", end='\r')
+                # else:
+                #     print(f"Skipping DNF clause: {expr}")
+                constraints.append(expr)
+                print(f"Loaded {i+1} constraints", end='\r')
+        log.info(f"Loaded {len(constraints)} constraints from {path}")
         return constraints

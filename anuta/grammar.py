@@ -7,7 +7,7 @@ from rich import print as pprint
 import warnings
 warnings.filterwarnings("ignore")
 
-from utils import log, consecutive_combinations, desugar
+from utils import log, consecutive_combinations, desugar, true, false
 from model import Constraint
 
 
@@ -71,8 +71,8 @@ class Anuta(object):
         new_candidates: Set[Constraint] = set()
         if self.search_arity == 1:
             literals: List[Constraint] = []
-            #* Generate the shortest (most specific) constraints.
-            for composition in self.generate_arity1_constraints():
+            #* Generate the shortest (most specific, arity-1) constraints.
+            for composition in self.generate_literals():
                 literals.append(composition)
             log.info(f"Prior size: {len(self.prior)}")
             
@@ -85,8 +85,8 @@ class Anuta(object):
                     #* (A => B), (B => A)
                     candidate = Constraint(sp.Implies(premise.expr, conclusion.expr))
                     #^ Don't learn arity-1 ancestors as they are domain prior.
-                    assert type(candidate.expr) == sp.Implies, (
-                        f"Candidate {candidate} is not an implication.")
+                    assert type(candidate.expr) == sp.Implies and not candidate.expr in [true, false], (
+                        f"{candidate} is not an implication or is trivial.")
                     new_candidates.add(candidate)
             self.search_arity = 2
         else:
@@ -110,23 +110,37 @@ class Anuta(object):
                     premise2 = Constraint(premise2)
                     conclusion2 = Constraint(conclusion2)
                     # if sp.Equivalent(desugar(premise1), desugar(premise2)):
-                    #^ Equivalence check is expensive.
+                    #^ Equivalence check is expensive (e.g., (A=>B)+(~A=>B) == (F=>B) == True).
                     if premise1 == premise2:
                         #* Specific: (A=>B)+(A=>C) -> More general: (A => (B | C))
                         composition = Constraint(premise1.expr >> (conclusion1.expr | conclusion2.expr))
+                        # assert not composition.expr in [true, false], (
+                        #     f"{composition} is trivial ({candidate1}, {candidate2}).")
+                        if composition.expr in [true, false]:
+                            #^ Filter trivial constraints.
+                            self.num_candidates_rejected += 1
+                        else:
+                            new_candidates.add(composition)
+                        
                         # if composition not in new_candidates:
                             # composition.ancestors = set([candidate1, candidate2])
                             # stem_candidates |= composition.ancestors
-                        new_candidates.add(composition)
                             # self.num_candidates_proposed += 1
                     # elif sp.Equivalent(desugar(conclusion1), desugar(conclusion2)):
                     elif conclusion1 == conclusion2:
                         #* Specific: (A=>B)+(C=>B) -> More general: ((A & C) => B)
                         composition = Constraint((premise1.expr & premise2.expr) >> conclusion1.expr)
+                        # assert not composition.expr in [true, false], (
+                        #     f"{composition} is trivial ({candidate1}, {candidate2}).")
+                        if composition.expr in [true, false]:
+                            #^ Filter trivial constraints.
+                            self.num_candidates_rejected += 1
+                        else:
+                            new_candidates.add(composition)
+                            
                         # if composition not in new_candidates:
                             # composition.ancestors = set([candidate1, candidate2])
                             # stem_candidates |= composition.ancestors
-                        new_candidates.add(composition)
                             # self.num_candidates_proposed += 1
                     # else:
                     #     log.info(f"Unpaired candidates: {candidate1}, {candidate2}")
@@ -147,9 +161,9 @@ class Anuta(object):
         return
 
     
-    def generate_arity1_constraints(self) -> Generator[Constraint, None, None]:
+    def generate_literals(self) -> Generator[Constraint, None, None]:
         for name, var in self.variables.items():
-            var_prior = []
+            # var_prior = []
             if name in self.constants:
                 #* If the var has associated constants, don't enumerate its domain (often too large).
                 match self.constants[name].ctype:
@@ -158,19 +172,21 @@ class Anuta(object):
                             self.num_candidates_proposed += 2
                             #* Var == const
                             constraint = Constraint(sp.Eq(var, sp.S(const)))
+                            assert not constraint.expr in [true, false], ("{constraint} is trivial.")
                             #* Var != const
                             neg_constraint = Constraint(sp.Ne(var, sp.S(const)))
+                            assert not neg_constraint.expr in [true, false], (f"{neg_constraint} is trivial.")
                             #& First-level elimination through domain check.
                             if const in self.domains[name].values:
                                 #* Learn the constraint as a fact.
-                                var_prior.append(constraint.expr)
+                                self.prior.add(constraint.expr)
                                 yield constraint
                                 yield neg_constraint
                             else:
-                                log.warning(f"Constant {const} not in domain of {name}.")
+                                log.warning(f"Constant {const} not in the domain of {name}.")
                                 #* Learn negation of the constraint as a fact.
                                 #? Is this too strong an assumption? (i.e., this value may occur in other datesets)
-                                var_prior.append(neg_constraint.expr)
+                                self.prior.add(neg_constraint.expr)
                                 self.num_candidates_rejected += 1
                     case ConstantType.SCALAR:
                         #^ Omit scalar expressions for now.
@@ -185,17 +201,20 @@ class Anuta(object):
                         self.num_candidates_proposed += 2
                         #* Var == value
                         constraint = Constraint(sp.Eq(var, sp.S(value)))
+                        assert not constraint.expr in [true, false], (f"{constraint} is trivial.")
                         #* Var != value
                         neg_constraint = Constraint(sp.Ne(var, sp.S(value)))
+                        assert not neg_constraint.expr in [true, false], (f"{neg_constraint} is trivial.")
                         
-                        var_prior.append(constraint.expr)
+                        self.prior.add(constraint.expr)
                         yield constraint
                         yield neg_constraint
                 if domain.kind == Kind.NUMERICAL: 
                     #* Omit numerical vars w/o associated constants for now.
                     continue
-            #* Add the prior knowledge of the var (X=1 | X=2 | ...)
-            self.prior.add(Constraint(sp.Or(*var_prior)))
+            # #* Add the prior knowledge of the var (X=1 | X=2 | ...)
+            #! Priors should be ANDed, not ORed (won't cause conflicts).
+            # self.prior.add(Constraint(sp.Or(*var_prior)))
     
     def generate_expressions(self) -> Generator[sp.Expr, None, None]:
         """Generate expressions of a single atom (arity-1).

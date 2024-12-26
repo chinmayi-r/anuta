@@ -4,6 +4,9 @@ from typing import *
 import sympy as sp
 
 
+true = sp.logic.true
+false = sp.logic.false
+
 log = logging.getLogger("anuta")
 handler = logging.StreamHandler()
 # handler.setLevel(logging.INFO)
@@ -14,6 +17,66 @@ formatter = logging.Formatter(
 handler.setFormatter(formatter)
 log.addHandler(handler)
 log.setLevel(logging.INFO)
+
+def is_purely_or(expr):
+    from sympy.logic.boolalg import Or
+    """
+    Check if a SymPy formula is purely made of `Or` logic (disjunctions of comparison operations).
+
+    Parameters:
+    expr: sympy.Expr
+        The Boolean expression to check.
+
+    Returns:
+    bool
+        True if the formula is purely made of `Or` logic with `Eq` or `Ne` comparisons, False otherwise.
+    """
+    # Check if the expression is a comparison operation (Eq or Ne)
+    def is_comparison(sub_expr):
+        return isinstance(sub_expr, (sp.Eq, sp.Ne))
+
+    # Main logic: Traverse the tree to ensure it's purely Or logic
+    if isinstance(expr, Or):  # Top-level Or
+        return all(is_comparison(arg) or is_purely_or(arg) for arg in expr.args)
+    return is_comparison(expr)  # Single comparison is valid
+
+def is_pure_dnf(expr):
+    from sympy.logic.boolalg import Or, And, Not
+    """
+    Check if a SymPy formula is purely made of sp.Or logic (DNF).
+
+    Parameters:
+    expr: sympy.Expr
+        The Boolean expression to check.
+
+    Returns:
+    bool
+        True if the formula is in DNF, False otherwise.
+    """
+
+    # Check if a sub-expression is a valid DNF clause
+    def is_dnf_clause(sub_expr):
+        # A DNF clause must be a single variable, its negation, or an And operation
+        if isinstance(sub_expr, sp.Symbol):
+            return True
+        elif isinstance(sub_expr, Not) and isinstance(sub_expr.args[0], sp.Symbol):
+            return True
+        elif isinstance(sub_expr, And):
+            # All terms in the And must be symbols or negated symbols
+            return all(
+                isinstance(arg, sp.Symbol) or 
+                (isinstance(arg, Not) and isinstance(arg.args[0], sp.Symbol))
+                for arg in sub_expr.args
+            )
+        return False
+
+    # Main logic: Check if the expression is an Or of DNF clauses
+    if isinstance(expr, Or):
+        # All arguments of the Or must be valid DNF clauses
+        return all(is_dnf_clause(arg) for arg in expr.args)
+    elif is_dnf_clause(expr):  # A single clause can itself be valid DNF
+        return True
+    return False
 
 def consecutive_combinations(lst):
     ccombo = []

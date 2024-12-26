@@ -178,7 +178,7 @@ def miner_levelwise(constructor: Constructor, limit: int):
             f"{len(aggregated_violations)=} != {len(anuta.candidates)=}"
         pprint(Counter(aggregated_violations))
         
-        log.info(f"Removing violated constraints ...")
+        log.info(f"Rejecting candidates ...")
         old_size = len(anuta.kb)
         new_candidates = set()
         for idx, is_violated in enumerate(aggregated_violations):
@@ -217,7 +217,7 @@ def miner_levelwise(constructor: Constructor, limit: int):
     print(f"Total rejected: {anuta.num_candidates_rejected} ({anuta.num_candidates_rejected/anuta.num_candidates_proposed:.2%})")
     print(f"Total prior: {len(anuta.prior)}")
     print(f"Total learned: {len(anuta.kb)} ({len(anuta.kb)/anuta.num_candidates_proposed:.2%})")
-    #* Prior: [(X=2 | X=3 | ...), (Y=100 | Y=200 | ...)]
+    #* Prior: [(X=2 & X!=3 & ...), (Y=500 & Y=400 & ...)]
     Model.save_constraints(anuta.kb | anuta.prior, f'learned_{label}_a{ARITY_LIMIT}.rule')
     print(f"Runtime: {end-start:.2f}s\n\n")
     
