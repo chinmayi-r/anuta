@@ -179,14 +179,14 @@ class Anuta(object):
                             #& First-level elimination through domain check.
                             if const in self.domains[name].values:
                                 #* Learn the constraint as a fact.
-                                self.prior.add(constraint.expr)
+                                self.prior.add(constraint)
                                 yield constraint
                                 yield neg_constraint
                             else:
                                 log.warning(f"Constant {const} not in the domain of {name}.")
                                 #* Learn negation of the constraint as a fact.
                                 #? Is this too strong an assumption? (i.e., this value may occur in other datesets)
-                                self.prior.add(neg_constraint.expr)
+                                self.prior.add(neg_constraint)
                                 self.num_candidates_rejected += 1
                     case ConstantType.SCALAR:
                         #^ Omit scalar expressions for now.
@@ -206,7 +206,7 @@ class Anuta(object):
                         neg_constraint = Constraint(sp.Ne(var, sp.S(value)))
                         assert not neg_constraint.expr in [true, false], (f"{neg_constraint} is trivial.")
                         
-                        self.prior.add(constraint.expr)
+                        self.prior.add(constraint)
                         yield constraint
                         yield neg_constraint
                 if domain.kind == Kind.NUMERICAL: 
