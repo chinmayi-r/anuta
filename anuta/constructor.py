@@ -7,8 +7,8 @@ import sympy as sp
 import json
 import sys
 
-from grammar import AnutaMilli, Bounds, Anuta, Domain, Kind, ConstantType, Constants
-from known import ip_map, cidds_constants, flag_map, proto_map, cidds_ip_conversion
+from grammar import AnutaMilli, Bounds, Anuta, Domain, DomainType, ConstantType, Constants
+from known import *
 from utils import log, save_constraints, to_big_camelcase
 
 
@@ -79,18 +79,17 @@ class Cidds001(Constructor):
         self.df['Proto'] = self.df['Proto'].apply(proto_map)
         for var in ['SrcIpAddr', 'DstIpAddr']:
             self.df[var] = self.df[var].apply(ip_map)
-        #? Should port be a categorical variable? Sometimes we need range values (i.e., application and dynamic ports).
-        self.categorical = ['Flags', 'Proto', 'SrcIpAddr', 'DstIpAddr'] + ['SrcPt', 'DstPt']
+        self.categorical = cidds_categorical
         
         domains = {}
         for var in self.df.columns:
             if var not in self.categorical:
-                domains[var] = Domain(Kind.NUMERICAL, 
+                domains[var] = Domain(DomainType.NUMERICAL, 
                                       Bounds(self.df[var].min().item(), 
                                              self.df[var].max().item()), 
                                       None)
             else:
-                domains[var] = Domain(Kind.CATEGORICAL, 
+                domains[var] = Domain(DomainType.CATEGORICAL, 
                                       None, 
                                       self.df[var].unique())
         
@@ -101,18 +100,19 @@ class Cidds001(Constructor):
             if 'ip' in var.lower():
                 #& Don't need to add the IP constants here, as the domain is small and can be enumerated.
                 self.constants[var] = Constants(
-                    ctype=ConstantType.ASSIGNMENT,
+                    kind=ConstantType.ASSIGNMENT,
                     values=cidds_constants['ip']
                 )
             elif 'pt' in var.lower():
                 self.constants[var] = Constants(
-                    ctype=ConstantType.ASSIGNMENT,
+                    kind=ConstantType.ASSIGNMENT,
                     values=cidds_constants['port']
                 )
             elif 'packet' in var.lower():
                 self.constants[var] = Constants(
-                    ctype=ConstantType.SCALAR,
-                    values=cidds_constants['packet']
+                    kind=ConstantType.SCALAR,
+                    #* Sort the values in ascending order.
+                    values=sorted(cidds_constants['packet'])
                 )
                 
         self.anuta = Anuta(variables, domains, self.constants, prior_kb)

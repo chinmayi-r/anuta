@@ -12,10 +12,10 @@ import psutil
 import warnings
 warnings.filterwarnings("ignore")
 
-from grammar import AnutaMilli, Anuta, Kind
+from grammar import AnutaMilli, Anuta, DomainType
 from constructor import Constructor, DomainCounter
 from model import Model, Constraint
-from utils import log, desugar, save_constraints
+from utils import log, clausify, save_constraints
 
 
 anuta : Anuta = None
@@ -129,7 +129,7 @@ def test_candidates(
                 violations[k] = 1
         
     log.info(f"Worker {worker_idx+1} finished.")
-    pprint(exhausted_values)
+    pprint(dict(exhausted_values))
     return violations
 
 
@@ -145,35 +145,44 @@ def miner_levelwise(constructor: Constructor, limit: int):
     core_count = psutil.cpu_count()
     dfpartitions = [df.reset_index(drop=True) for df in np.array_split(constructor.df, core_count)]
     indexsets, fcounts = zip(*[constructor.get_indexset_and_counter(df, anuta.domains) for df in dfpartitions])
+    fullindexsets, fullfcounts = constructor.get_indexset_and_counter(constructor.df, anuta.domains)
     
     pprint(fcounts[0])
     
-    while anuta.search_arity < ARITY_LIMIT:
+    while anuta.search_arity <= ARITY_LIMIT:
         anuta.propose_new_candidates()
         
-        log.info(f"Started searching for arity-{anuta.search_arity} constraints.")
+        log.info(f"Started testing arity-{anuta.search_arity} constraints.")
         if not anuta.candidates:
-            log.error(f"No new candidates found.")
+            log.warn(f"No new candidates found.")
             break
         
         log.info(f"Testing {len(anuta.candidates)} arity-{anuta.search_arity} candidates ...")
-        args = [(i, df, indexset, fcount, limit//core_count) 
-                for i, (df, indexset, fcount) in enumerate(
-                    # zip(dfpartitions, deepcopy(indexsets), deepcopy(fcounts)))]
-                    zip(dfpartitions, deepcopy(indexsets), deepcopy(fcounts)))]
-                    #? Create new DC counters or keep the counts from the level?
-                    #^ I think we should NOT keep the counts from the previous level,
-                    #^ because an unviolated example could eliminate a candidate on the next level.
-                    
-        log.info(f"Spawning {core_count} workers ...")
-        pool = Pool(core_count)
-        log.info(f"Testing arity-{anuta.search_arity} constraint in parallel ...")
-        violation_indices = pool.starmap(test_candidates, args)
-        log.info(f"All workers finished.")
-        # pool.close()
+        nworkers = core_count
+        if limit <= core_count or len(anuta.candidates) <= core_count:
+            #* Avoid parallel overhead if the number of candidates is small.
+            nworkers = 1
+        log.info(f"Spawning {nworkers} workers ...")
+        if nworkers > 1:
+            #* Prepare arguments for parallel processing
+            args = [(i, df, indexset, fcount, limit//nworkers) 
+                    for i, (df, indexset, fcount) in enumerate(
+                        # zip(dfpartitions, deepcopy(indexsets), deepcopy(fcounts)))]
+                        zip(dfpartitions, deepcopy(indexsets), deepcopy(fcounts)))]
+                        #? Create new DC counters or keep the counts from the level?
+                        #^ I think we should NOT keep the counts from the previous level,
+                        #^ because an unviolated example could eliminate a candidate on the next level.
+            pool = Pool(core_count)
+            log.info(f"Testing arity-{anuta.search_arity} constraint in parallel ...")
+            violation_indices = pool.starmap(test_candidates, args)
+            log.info(f"All workers finished.")
+            pool.close()
+        else:
+            violation_indices = test_candidates(0, constructor.df, fullindexsets, fullfcounts, limit)
         
         log.info(f"Aggregating violations ...")
-        aggregated_violations = np.logical_or.reduce(violation_indices)
+        aggregated_violations = np.logical_or.reduce(violation_indices) \
+            if nworkers > 1 else violation_indices
         assert len(aggregated_violations) == len(anuta.candidates), \
             f"{len(aggregated_violations)=} != {len(anuta.candidates)=}"
         pprint(Counter(aggregated_violations))
@@ -193,6 +202,7 @@ def miner_levelwise(constructor: Constructor, limit: int):
                 anuta.kb.add(candidate)
 
         # log.info(f"Removed {len(anuta.candidates)-len(new_candidates)} candidates.")
+        #TODO: Don't reuse `candidates`, use `rejected`.
         anuta.candidates = new_candidates
         new_size = len(anuta.kb)
         log.info(f"Learned {new_size-old_size} candidates.")
@@ -228,7 +238,7 @@ def miner_levelwise(constructor: Constructor, limit: int):
         # assumptions = [v >= 0 for v in anuta.variables.values()]
         assumptions = anuta.prior
         cnf = sp.And(*(anuta.kb | set(assumptions)))
-        simplified_logic = sp.to_cnf(desugar(cnf))
+        simplified_logic = sp.to_cnf(clausify(cnf))
         reduced_kb = list(simplified_logic.args) \
             if isinstance(simplified_logic, sp.And) else [simplified_logic]
         pruned_count = len(anuta.kb) - len(reduced_kb)

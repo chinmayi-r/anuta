@@ -4,9 +4,9 @@ from sympy.logic.inference import satisfiable
 from typing import *
 from rich import print as pprint
 from tqdm import tqdm
+from time import perf_counter
 
-from known import cidds_conversions
-from utils import log, desugar, is_purely_or
+from utils import *
 
 
 class Constraint(object):
@@ -16,8 +16,11 @@ class Constraint(object):
         #* Semantic expression: original (sugared) formula for readability.
         self.expr: sp.Expr = expr
         # self.ancestors: Set['Constraint'] = set()
+        # #* Numerical identity: -1, Scaled numerial: ≥0, others: None
+        # self.rank: int = None
+        # self.maxrank: int = None
         #* Use the syntactic model to identify the constraint.
-        self.id = hash(sp.srepr(desugar(self.expr)))
+        self.id = hash(sp.srepr(clausify(self.expr)))
         
     def __hash__(self) -> int:
         #* Define the identity of the constraint for easy set operations.
@@ -42,28 +45,52 @@ class Model(object):
         #TODO: Yield the semantic model the formula given the mappings in domain knowledge.
         pass
     
-    def entails(self, query: str) -> bool:
+    def entails(self, query: str, verbose: bool=True) -> bool:
+        """Proof system for entailment checking."""
         query = sp.sympify(query)
-        pprint(query)
         if type(query) == sp.Equivalent:
             #* Needs manual interpretation due to sympy's limitation.
             lhs, rhs = query.args 
-            query = [sp.Or(~lhs, rhs), sp.Or(~rhs, lhs)]
+            query = [
+                (sp.Or(~lhs, rhs), true), #* Sufficiency
+                (sp.Or(~rhs, lhs), true), #* Necessity
+            ]
+        elif type(query) == sp.Implies:
+            premise, conclusion = query.args
+            query = [
+                (query, true), #* Factual
+                (premise >> ~conclusion, false), #* Counterfactual
+            ]
+        # elif type(query) == sp.Equality:
+        #     lhs, rhs = query.args
+        #     query = [
+        #         #! lhs==rhs could be present and the following would be false.
+        #         (lhs >= rhs, true), #* A ≥ B
+        #         (rhs >= lhs, true), #* B ≥ A
+        #     ]
         else:
-            query = [desugar(query)]
+            query = [(clausify(query), true)]
         
+        start = perf_counter()
         sats = [
-            satisfiable(
-                desugar(sp.Not(sp.Or(~self._model, q)))
-            )
-            for q in query
+            bool(satisfiable(
+                clausify(sp.Not(sp.Or(~self._model, q)))
+            )) & expected
+            for q, expected in query
         ]
         #* If the negation is not satisfiable (i.e., there is no interpretation
-        #* KB is true but query is false), then the entailment holds.
-        return not any(sats)
+        #* that KB is true but query is false), then the entailment holds.
+        entailed = not any(sats)
+        end = perf_counter()
+        
+        if verbose:
+            pprint("Query:", query, sep='\t')
+            pprint("Entailed by model: ", entailed, sep=' ')
+            log.info(f"Inference time: {end-start:.2f}s")
+        return entailed
     
     @staticmethod
-    def create(constraints: List[sp.Expr|Constraint] | Set[sp.Expr|Constraint]) -> 'Model':
+    def create(constraints: List[sp.Expr|Constraint] | Set[sp.Expr|Constraint]) -> sp.Expr:
         log.info("Creating model...")
         constraints = list(constraints)
         if type(constraints[0]) == Constraint:
@@ -74,14 +101,16 @@ class Model(object):
             # simplified.append(constraint)
             #! To create syntactic model from semantic constraints, we must desugar them.
             #* Semantic land -> Syntactic land
-            simplified.append(desugar(constraint))
-        return sp.And(*simplified)
+            simplified.append(clausify(constraint))
+        model = sp.And(*simplified)
+        log.info(f"Created model of size {len(simplified)}")
+        return model
     
     @staticmethod
     def save_constraints(constraints: List[sp.Expr]|Set[sp.Expr], path: str='constraints.rule'):
         assert len(constraints) > 0, "No constraints to save."
         constraints = list(constraints)
-        if type(constraints[0]) == Constraint:
+        if isinstance(constraints[0], Constraint):
             constraints = [constraint.expr for constraint in constraints]
         
         with open(f"{path}", 'w') as f:
