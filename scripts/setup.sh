@@ -19,11 +19,12 @@ set -x
     python -m venv venv
     source venv/bin/activate
     pip install -r requirements.txt
+    pip install -e .
 
     sudo apt install htop -y
     git config --global credential.helper store
 
-    unzip data/meta.zip -d data
+    unzip data/meta.zip -d data/
 
     exit 0
 }

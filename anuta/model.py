@@ -5,8 +5,9 @@ from typing import *
 from rich import print as pprint
 from tqdm import tqdm
 from time import perf_counter
+import pickle
 
-from utils import *
+from anuta.utils import *
 
 
 class Constraint(object):
@@ -48,18 +49,21 @@ class Model(object):
     def entails(self, query: str, verbose: bool=True) -> bool:
         """Proof system for entailment checking."""
         query = sp.sympify(query)
+        if verbose:
+            pprint("Query:", query, sep='\t')
+
         if type(query) == sp.Equivalent:
             #* Needs manual interpretation due to sympy's limitation.
             lhs, rhs = query.args 
             query = [
-                (sp.Or(~lhs, rhs), true), #* Sufficiency
-                (sp.Or(~rhs, lhs), true), #* Necessity
+                (clausify(sp.Or(~lhs, rhs)), true), #* Sufficiency
+                (clausify(sp.Or(~rhs, lhs)), true), #* Necessity
             ]
         elif type(query) == sp.Implies:
             premise, conclusion = query.args
             query = [
-                (query, true), #* Factual
-                (premise >> ~conclusion, false), #* Counterfactual
+                (clausify(query), true), #* Factual
+                (clausify(premise >> ~conclusion), false), #* Counterfactual
             ]
         # elif type(query) == sp.Equality:
         #     lhs, rhs = query.args
@@ -73,9 +77,13 @@ class Model(object):
         
         start = perf_counter()
         sats = [
-            bool(satisfiable(
-                clausify(sp.Not(sp.Or(~self._model, q)))
-            )) & expected
+            ~sp.Xor(
+                bool(satisfiable(
+                    clausify(
+                        sp.Not(sp.Or(~self._model, q))
+                    )
+                )),
+            expected)
             for q, expected in query
         ]
         #* If the negation is not satisfiable (i.e., there is no interpretation
@@ -84,9 +92,8 @@ class Model(object):
         end = perf_counter()
         
         if verbose:
-            pprint("Query:", query, sep='\t')
-            pprint("Entailed by model: ", entailed, sep=' ')
-            log.info(f"Inference time: {end-start:.2f}s")
+            pprint("Entailed by model:", entailed, sep=' ')
+            pprint(f"Inference time:\t{end-start:.2f} s")
         return entailed
     
     @staticmethod
@@ -103,8 +110,14 @@ class Model(object):
             #* Semantic land -> Syntactic land
             simplified.append(clausify(constraint))
         model = sp.And(*simplified)
-        log.info(f"Created model of size {len(simplified)}")
+        log.info(f"Model size {len(simplified)}")
         return model
+    
+    @staticmethod
+    def save_model(model: sp.Expr, path: str='model.pkl') -> None:
+        with open(f"{path}", 'w') as f:
+            pickle.dump(model, f, protocol=pickle.HIGHEST_PROTOCOL)
+        log.info(f"Model saved to {path}")
     
     @staticmethod
     def save_constraints(constraints: List[sp.Expr]|Set[sp.Expr], path: str='constraints.rule'):
@@ -128,6 +141,9 @@ class Model(object):
         with open(f"{path}", 'r') as f:
             for i, line in enumerate(f):
                 expr = sp.sympify(line.strip())
+                #! Ignore equality constraints (from prior) as they are too strong.
+                if type(expr) in [sp.Equality]:
+                    continue
                 # if not is_purely_or(expr):
                 #     constraints.append(expr)
                 #     print(f"Loaded {i+1} constraints", end='\r')

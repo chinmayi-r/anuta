@@ -7,8 +7,8 @@ from rich import print as pprint
 import warnings
 warnings.filterwarnings("ignore")
 
-from utils import log, consecutive_combinations, clausify, true, false
-from model import Constraint
+from anuta.utils import log, consecutive_combinations, clausify, true, false
+from anuta.model import Constraint
 
 
 @dataclass
@@ -67,7 +67,8 @@ class Anuta(object):
         self.search_arity = 1
         
         #* Caching intermediate results.
-        self._arity2_candidates: Set[Constraint] = set()
+        self._arity2_cache: Set[Constraint] = set()
+        self._literal_cache: Set[Constraint] = set()
     
     def rank_literal(self, literal: sp.Mul | sp.Symbol) -> Tuple[int, int]:
         if type(literal) != sp.Mul:
@@ -252,6 +253,9 @@ class Anuta(object):
             assert type(candidate.expr) == sp.Implies
             premise, conclusion = candidate.expr.args
             
+            # if candidate == Constraint(sp.Implies(sp.Eq(self.variables['Proto'], 2), self.variables['Bytes']>=sp.Mul(self.variables['Packets'], 65535))):
+            #     print(f"Refining {candidate=}")
+            
             if type(premise) in [sp.And, sp.Or]:
                 #^ (A & B & ...) => ...
                 assert type(premise) == sp.And
@@ -304,6 +308,8 @@ class Anuta(object):
                     refined_candidates.add(new_candidate)
                 elif new_conclusion is not None:
                     self.backlog.add(candidate)
+
+        log.info(f"Created {len(refined_candidates)} refined constraints.")
         return refined_candidates
             
     def propose_new_candidates(self) -> None:
@@ -322,7 +328,7 @@ class Anuta(object):
                 #NOTE: A bit ugly but don't want to nest if-else again.
                 self.num_candidates_proposed += len(new_candidates)
                 self.candidates = list(new_candidates)
-                log.info(f"Refined {len(self.candidates)} arity-{self.search_arity} constraints.\nFirst a few:")
+                log.info(f"Refined {len(self.candidates)} arity-{self.search_arity} constraints. First a few:")
                 pprint(self.candidates[:5])
                 return
             else:
@@ -331,7 +337,7 @@ class Anuta(object):
                 self.backlog = set()
             
             #& Only propose new candidates of higher arity if no existing candidates can be generalized.
-            log.info(f"Proposing arity-3 constraints from {len(self.candidates)} arity-2 rejected constraints.")
+            log.info(f"Proposing arity-3 constraints from {len(self.candidates)} rejected arity-2 constraints.")
             self.search_arity = 3
             new_candidates: Set[Constraint] = set()
             
@@ -383,8 +389,11 @@ class Anuta(object):
             # specialized_rej_bounds = [self.specialize_clause(bound, init=True)[1] for bound in rejected_bounds]
             
             #NOTE: Arity 2 bounds are the most specific.
-            arity2_bounds = [bound for bound in self._arity2_candidates if type(bound.expr) in [sp.GreaterThan, sp.StrictGreaterThan]]
-            equality_literals = [literal.expr for literal in self._arity2_candidates if type(literal.expr) in [sp.Equality, sp.Unequality]]  
+            log.info(f"{rejected_bounds=}")
+            arity2_bounds = [bound.expr for bound in self._arity2_cache if type(bound.expr) in [sp.GreaterThan, sp.StrictGreaterThan]]
+            equality_literals = [literal.expr for literal in self._literal_cache if type(literal.expr) in [sp.Equality, sp.Unequality]]  
+            # print(f"{len(arity2_bounds)=}")
+            # print(f"{len(equality_literals)=}")
             for i, rejected_bound in enumerate(rejected_bounds):
                 for literal in equality_literals:
                     #* The rejected bounds are the most general after interative refinement.
@@ -405,7 +414,7 @@ class Anuta(object):
             for literal in equality_literals:
                 for specialized_bound in arity2_bounds:
                     #* (A≠a) => (specialized rejeceted bound: sX≥sY)
-                    composite = Constraint( literal >> specialized_bound.expr )
+                    composite = Constraint( literal >> specialized_bound )
                     new_candidates.add(composite)
                 print(f"Proposed {len(new_candidates)} arity-{self.search_arity} implications w/ bounds.", end='\r')
             log.info(f"Proposed {len(new_candidates)-cur_ncandidates} arity-{self.search_arity} implications w/ bounds")
@@ -431,10 +440,11 @@ class Anuta(object):
         return
 
     def propose_arity2_candidates(self) -> Set[Constraint]:
-        if self._arity2_candidates:
-            return self._arity2_candidates
+        if self._arity2_cache:
+            return self._arity2_cache
         #^ Generate the shortest (most specific, arity-1) constraints.
         literals: List[Constraint] = list(self.generate_literals())
+        self._literal_cache = set(literals)
         new_candidates: Set[Constraint] = set()
         
         for lhs in literals:
@@ -448,6 +458,8 @@ class Anuta(object):
                     if lhs.expr.args[0] == conclusion.expr.args[0]: continue
                     
                     candidate = Constraint(sp.Implies(lhs.expr, conclusion.expr))
+                    # if candidate == Constraint(sp.Implies(sp.Eq(self.variables['DstIpAddr'], 3), sp.Ne(self.variables['SrcPt'], 8080))):
+                    #     print(f"Generated {candidate=}")
                     #^ A => B
                     assert type(candidate.expr) == sp.Implies and not candidate.expr in [true, false], (
                         f"{candidate} is not an implication or is trivial.")
@@ -481,7 +493,8 @@ class Anuta(object):
                             new_candidates.add(candidate)
             else:
                 raise NotImplementedError(f"Unsupported literal: {lhs}")
-            self._arity2_candidates = new_candidates
+        
+        self._arity2_cache = new_candidates.copy()
         return new_candidates
         
     
@@ -502,14 +515,13 @@ class Anuta(object):
                             assert not neg_constraint.expr in [true, false], (f"{neg_constraint} is trivial.")
                             #& First-level elimination through domain check.
                             if const in self.domains[name].values:
-                                #* Learn the constraint as a fact.
-                                self.prior.add(constraint)
+                                #! Do NOT learn possible assignments as facts (too strong).
+                                # self.prior.add(constraint)
                                 yield constraint
                                 yield neg_constraint
                             else:
                                 log.warning(f"Constant {const} not in the domain of {name}.")
-                                #* Learn negation of the constraint as a fact.
-                                #? Is this too strong an assumption? (i.e., this value may occur in other datesets)
+                                #* Learn negation assignment as a fact, i.e., this constant is not in the domain.
                                 self.prior.add(neg_constraint)
                                 self.num_candidates_rejected += 1
                     case ConstantType.SCALAR:
@@ -538,7 +550,8 @@ class Anuta(object):
                         neg_constraint = Constraint(sp.Ne(var, sp.S(value)))
                         assert not neg_constraint.expr in [true, false], (f"{neg_constraint} is trivial.")
                         
-                        self.prior.add(constraint)
+                        #! Do NOT learn possible assignments as facts (too strong).
+                        # self.prior.add(constraint)
                         yield constraint
                         yield neg_constraint
                 elif domain.kind == DomainType.NUMERICAL: 

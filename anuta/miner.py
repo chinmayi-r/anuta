@@ -12,10 +12,10 @@ import psutil
 import warnings
 warnings.filterwarnings("ignore")
 
-from grammar import AnutaMilli, Anuta, DomainType
-from constructor import Constructor, DomainCounter
-from model import Model, Constraint
-from utils import log, clausify, save_constraints
+from anuta.grammar import AnutaMilli, Anuta, DomainType
+from anuta.constructor import Constructor, DomainCounter
+from anuta.model import Model, Constraint
+from anuta.utils import log, clausify, save_constraints
 
 
 anuta : Anuta = None
@@ -133,7 +133,7 @@ def test_candidates(
     return violations
 
 
-def miner_levelwise(constructor: Constructor, limit: int):
+def miner_versionspace(constructor: Constructor, limit: int):
     global anuta
     #* Use a global var to prevent passing the object to each worker.
     anuta = constructor.anuta

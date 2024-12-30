@@ -10,18 +10,17 @@ from concurrent.futures import ThreadPoolExecutor, as_completed, ProcessPoolExec
 from typing import *
 from copy import deepcopy
 from time import perf_counter
-
-from constructor import Constructor, Millisampler, Cidds001
-from miner import miner_levelwise
-from utils import log, save_constraints
 import json
 import warnings
 warnings.filterwarnings("ignore")
 
+from anuta.constructor import Constructor, Millisampler, Cidds001
+from anuta.miner import miner_versionspace, miner_valiant
+
     
 def main(constructor: Constructor, limit: int):
-    miner_levelwise(constructor, limit)
-    
+    # miner_valiant(constructor, limit)
+    miner_versionspace(constructor, limit)
 
 if __name__ == '__main__':
     # boundsfile = f"./data/meta_bounds.json"

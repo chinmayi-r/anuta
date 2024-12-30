@@ -7,9 +7,9 @@ import sympy as sp
 import json
 import sys
 
-from grammar import AnutaMilli, Bounds, Anuta, Domain, DomainType, ConstantType, Constants
-from known import *
-from utils import log, save_constraints, to_big_camelcase
+from anuta.grammar import AnutaMilli, Bounds, Anuta, Domain, DomainType, ConstantType, Constants
+from anuta.known import *
+from anuta.utils import log, save_constraints, to_big_camelcase
 
 
 @dataclass
