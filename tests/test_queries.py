@@ -18,7 +18,9 @@ def cases() -> List[Dict[str, str]]:
 
 @pytest.fixture
 def model() -> Model:
-    modelpath = 'data/results/cidds/levelwise/learned_5000_a3.rule'
+    modelpath = 'data/results/cidds/versionspace/learned_150_a3.rule'
+    # modelpath = 'data/results/cidds/dc/learned_100.rule'
+    # modelpath = 'learned_100_a3_mac.rule'
     return Model(modelpath)
 
 def test_queries(cases: List[Dict[str, str]], model: Model) -> None:
@@ -34,7 +36,9 @@ def test_queries(cases: List[Dict[str, str]], model: Model) -> None:
 
         new_successes = 0
         for query in cases:
-            if model.entails(query, verbose=False):
+            entailed = model.entails(query, verbose=False)
+            # assert entailed, f"Failed Test #{i}"
+            if entailed:
                 new_successes += 1
             else:
                 print(f"Failed Test #{i}")

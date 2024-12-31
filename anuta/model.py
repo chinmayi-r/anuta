@@ -6,6 +6,7 @@ from rich import print as pprint
 from tqdm import tqdm
 from time import perf_counter
 import pickle
+from pathlib import Path
 
 from anuta.utils import *
 
@@ -40,7 +41,7 @@ class Constraint(object):
 class Model(object):
     def __init__(self, path_to_constraints: str):
         self.constraints = Model.load_constraints(path_to_constraints)
-        self._model = Model.create(self.constraints)
+        self._model = Model.create(self.constraints, path_to_constraints)
         
     def interpret(self, constraint: sp.Expr, dataset: str='cidds', reverse=False) -> sp.Expr:
         #TODO: Yield the semantic model the formula given the mappings in domain knowledge.
@@ -53,13 +54,14 @@ class Model(object):
             pprint("Query:", query, sep='\t')
 
         if type(query) == sp.Equivalent:
-            #* Needs manual interpretation due to sympy's limitation.
+            #* Biconditional introduction/elimination for Fitch proof system.
             lhs, rhs = query.args 
             query = [
                 (clausify(sp.Or(~lhs, rhs)), true), #* Sufficiency
                 (clausify(sp.Or(~rhs, lhs)), true), #* Necessity
             ]
         elif type(query) == sp.Implies:
+            #* Implies introduction/elimination for Fitch proof system.
             premise, conclusion = query.args
             query = [
                 (clausify(query), true), #* Factual
@@ -79,10 +81,17 @@ class Model(object):
         sats = [
             ~sp.Xor(
                 bool(satisfiable(
-                    clausify(
-                        sp.Not(sp.Or(~self._model, q))
-                    )
+                    #* Both the model and query should in clausal form already.
+                    # clausify(
+                        #* Proof by Resolution rule of Inference: 
+                        #*  To determine whether a set of sentences KB logically entails a sentence q, 
+                        #*  rewrite KB\/{~q} in clausal form and try to derive the empty clause.
+                        sp.And(self._model, ~q)
+                        #^ Same as below:
+                        # sp.Not(sp.Or(~self._model, q))
+                    # )
                 )),
+            #* Compare with expected output using XNOR.
             expected)
             for q, expected in query
         ]
@@ -97,25 +106,40 @@ class Model(object):
         return entailed
     
     @staticmethod
-    def create(constraints: List[sp.Expr|Constraint] | Set[sp.Expr|Constraint]) -> sp.Expr:
+    def create(
+        constraints: List[sp.Expr|Constraint] | Set[sp.Expr|Constraint], 
+        path: str,
+        save=True,
+    ) -> sp.Expr:
         log.info("Creating model...")
+        #* Take the last part of the path w/o extension as the model name.
+        modelname = path.split('/')[-1].split('.')[0]
+        modelpath = f"models/{modelname}.pkl"
+        #* Check if the model is already created.
+        if Path(modelpath).exists():
+            with open(modelpath, 'rb') as f:
+                model = pickle.load(f)
+            log.info(f"Model loaded from {modelpath}")
+            return model
+        
         constraints = list(constraints)
         if type(constraints[0]) == Constraint:
             constraints = [constraint.expr for constraint in constraints]
         
         simplified = []
         for constraint in tqdm(constraints):
-            # simplified.append(constraint)
             #! To create syntactic model from semantic constraints, we must desugar them.
             #* Semantic land -> Syntactic land
             simplified.append(clausify(constraint))
-        model = sp.And(*simplified)
+        model = sp.simplify_logic(sp.And(*simplified), form='cnf', deep=True)
         log.info(f"Model size {len(simplified)}")
+        if save:
+            Model.save_model(model, modelpath)
         return model
     
     @staticmethod
-    def save_model(model: sp.Expr, path: str='model.pkl') -> None:
-        with open(f"{path}", 'w') as f:
+    def save_model(model: sp.Expr, path: str='models/model.pkl') -> None:
+        with open(f"{path}", 'wb') as f:
             pickle.dump(model, f, protocol=pickle.HIGHEST_PROTOCOL)
         log.info(f"Model saved to {path}")
     
