@@ -35,8 +35,8 @@ if __name__ == '__main__':
         limit = cidds.df.shape[0]
         # main(cidds, sys.argv[1])
         # sys.exit(0)
-    
-    # cidds.df = cidds.df.sample(n=int(sys.argv[1]), random_state=42)
-    limit = int(sys.argv[1])
+    else:
+        # cidds.df = cidds.df.sample(n=int(sys.argv[1]), random_state=42)
+        limit = int(sys.argv[1])
     main(cidds, limit)
     sys.exit(0)
