@@ -1,8 +1,6 @@
 from typing import *
 import json
 import pytest
-import sys
-# sys.path.append("..")
 from tqdm import tqdm
 from rich import print as pprint
 

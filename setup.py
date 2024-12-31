@@ -34,7 +34,7 @@ setup(
     # version=read("anuta", "0.2"),
     description="Automatic constraint modeling for networked systems",
     url="https://github.com/HongyuHe/anuta",
-    # long_description=read("README.md"),
+    long_description=read("README.md"),
     long_description_content_type="text/markdown",
     author="Hongyu Hè",
     packages=find_packages(exclude=["tests", ".github"]),
