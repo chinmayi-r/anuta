@@ -118,12 +118,12 @@ class Theory(object):
         #* Take the last part of the path w/o extension as the theory name.
         modelname = path.split('/')[-1].split('.')[0]
         modelpath = f"theories/{modelname}.pkl"
-        #* Check if the theory is already created.
-        if Path(modelpath).exists():
-            with open(modelpath, 'rb') as f:
-                theory = pickle.load(f)
-            log.info(f"Theory loaded from {modelpath}")
-            return theory
+        # #* Check if the theory is already created.
+        # if Path(modelpath).exists():
+        #     with open(modelpath, 'rb') as f:
+        #         theory = pickle.load(f)
+        #     log.info(f"Theory loaded from {modelpath}")
+        #     return theory
         
         constraints = list(constraints)
         if type(constraints[0]) == Constraint:

@@ -16,9 +16,11 @@ def cases() -> List[Dict[str, str]]:
 
 @pytest.fixture
 def theory() -> Theory:
-    # modelpath = 'data/results/cidds/versionspace/learned_150_a3.rule'
+    # modelpath = 'data/results/cidds/versionspace/learned_500_a3.rule'
     # modelpath = 'data/results/cidds/dc/learned_100.rule'
     # modelpath = 'learned_100_a3_mac.rule'
+    modelpath = 'data/results/cidds/normal/learned_500_a3.rule'
+    modelpath = 'data/results/cidds/attacks/learned_500_a3.rule'
     modelpath = 'data/results/cidds/attacks/learned_1000_a3.rule'
     return Theory(modelpath)
 
