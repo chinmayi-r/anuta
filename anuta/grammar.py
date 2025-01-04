@@ -8,7 +8,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 from anuta.utils import log, consecutive_combinations, clausify, true, false
-from anuta.model import Constraint
+from anuta.theory import Constraint
 
 
 @dataclass
@@ -505,6 +505,8 @@ class Anuta(object):
                 #* If the var has associated constants, don't enumerate its domain (often too large).
                 match self.constants[name].kind:
                     case ConstantType.ASSIGNMENT:
+                        eq_priors: List[Constraint] = []
+                        ne_priors: List[Constraint] = []
                         for const in self.constants[name].values:
                             self.num_candidates_proposed += 2
                             #* Var == const
@@ -513,17 +515,26 @@ class Anuta(object):
                             #* Var != const
                             neg_constraint = Constraint(sp.Ne(var, sp.S(const)))
                             assert not neg_constraint.expr in [true, false], (f"{neg_constraint} is trivial.")
+                            
                             #& First-level elimination through domain check.
                             if const in self.domains[name].values:
                                 #! Do NOT learn possible assignments as facts (too strong).
-                                # self.prior.add(constraint)
+                                eq_priors.append(constraint.expr)
                                 yield constraint
+                                #* Still need the negation literals.
                                 yield neg_constraint
                             else:
                                 log.warning(f"Constant {const} not in the domain of {name}.")
                                 #* Learn negation assignment as a fact, i.e., this constant is not in the domain.
-                                self.prior.add(neg_constraint)
+                                ne_priors.append(neg_constraint.expr)
                                 self.num_candidates_rejected += 1
+                        if eq_priors:
+                            #* Add the prior knowledge (X=1 | X=2 | ...)
+                            self.prior.add(Constraint(sp.Or(*eq_priors)))
+                        if ne_priors:
+                            #* Add the prior knowledge (X!=1 & X!=2 & ...)
+                            #! AND for values not in the domain.
+                            self.prior.add(Constraint(sp.And(*ne_priors)))
                     case ConstantType.SCALAR:
                         assert self.domains[name].kind == DomainType.NUMERICAL, (
                             f"Scalar constant {self.constants[name]} must be associated with a numerical var.")
@@ -540,6 +551,7 @@ class Anuta(object):
             else:
                 domain = self.domains[name]
                 if domain.kind == DomainType.CATEGORICAL:
+                    eq_priors: List[Constraint] = []
                     #* Enumerate the domain of a categorical var.
                     for value in domain.values:
                         self.num_candidates_proposed += 2
@@ -550,10 +562,12 @@ class Anuta(object):
                         neg_constraint = Constraint(sp.Ne(var, sp.S(value)))
                         assert not neg_constraint.expr in [true, false], (f"{neg_constraint} is trivial.")
                         
-                        #! Do NOT learn possible assignments as facts (too strong).
-                        # self.prior.add(constraint)
+                        eq_priors.append(constraint.expr)
                         yield constraint
                         yield neg_constraint
+                    if eq_priors:
+                        #* Add the prior knowledge (X=1 | X=2 | ...)
+                        self.prior.add(Constraint(sp.Or(*eq_priors)))
                 elif domain.kind == DomainType.NUMERICAL: 
                     #* For numerical vars w/o associated constants, use the unary identity (NOP).
                     identity = Constraint(var)
@@ -561,9 +575,6 @@ class Anuta(object):
                     # identity.maxrank = -1
                     yield identity
                     
-            # #* Add the prior knowledge of the var (X=1 | X=2 | ...)
-            #! Priors should be ANDed, not ORed (won't cause conflicts).
-            # self.prior.add(Constraint(sp.Or(*var_prior)))
         log.info(f"Prior size: {len(self.prior)}")
         return
     

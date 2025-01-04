@@ -14,7 +14,7 @@ warnings.filterwarnings("ignore")
 
 from anuta.grammar import AnutaMilli, Anuta, DomainType
 from anuta.constructor import Constructor, DomainCounter
-from anuta.model import Model, Constraint
+from anuta.theory import Theory, Constraint
 from anuta.utils import log, clausify, save_constraints
 
 
@@ -228,7 +228,7 @@ def miner_versionspace(constructor: Constructor, limit: int):
     print(f"Total prior: {len(anuta.prior)}")
     print(f"Total learned: {len(anuta.kb)} ({len(anuta.kb)/anuta.num_candidates_proposed:.2%})")
     #* Prior: [(X=2 & X!=3 & ...), (Y=500 & Y=400 & ...)]
-    Model.save_constraints(anuta.kb | anuta.prior, f'learned_{label}_a{ARITY_LIMIT}.rule')
+    Theory.save_constraints(anuta.kb | anuta.prior, f'learned_{label}_a{ARITY_LIMIT}.rule')
     print(f"Runtime: {end-start:.2f}s\n\n")
     
     if len(anuta.kb) <= 200: 
@@ -246,7 +246,7 @@ def miner_versionspace(constructor: Constructor, limit: int):
         print(f"{len(anuta.kb)=}, {len(reduced_kb)=} ({pruned_count=})\n")
         print(f"Pruning time: {end-start:.2f}s\n\n")
         
-        Model.save_constraints(anuta.kb, f'pruned_{label}_a{ARITY_LIMIT}.rule')
+        Theory.save_constraints(anuta.kb, f'pruned_{label}_a{ARITY_LIMIT}.rule')
 
 def miner_valiant(constructor: Constructor, limit: int = 0):
     global anuta
@@ -299,7 +299,7 @@ def miner_valiant(constructor: Constructor, limit: int = 0):
     removed_count = len(anuta.initial_kb) - len(learned_kb)
     # pprint(aggregated_bounds)
     print(f"{len(learned_kb)=}, {len(anuta.initial_kb)=} ({removed_count=})")
-    Model.save_constraints(learned_kb + anuta.prior_kb, f'learned_{label}.rule')
+    Theory.save_constraints(learned_kb + anuta.prior_kb, f'learned_{label}.rule')
     print(f"Learning time: {end-start:.2f}s\n\n")
     
     if len(learned_kb) <= 200: 
@@ -318,4 +318,4 @@ def miner_valiant(constructor: Constructor, limit: int = 0):
         print(f"Pruning time: {end-start:.2f}s\n\n")
         
         anuta.learned_kb = reduced_kb + anuta.prior_kb
-        Model.save_constraints(anuta.learned_kb, f'reduced_{label}.rule')
+        Theory.save_constraints(anuta.learned_kb, f'reduced_{label}.rule')

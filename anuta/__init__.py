@@ -3,6 +3,6 @@ __all__ = [
     "grammar",
     "known",
     "miner",
-    "model",
+    "theory",
     "utils",
 ]

@@ -21,7 +21,7 @@ class Constraint(object):
         # #* Numerical identity: -1, Scaled numerial: ≥0, others: None
         # self.rank: int = None
         # self.maxrank: int = None
-        #* Use the syntactic model to identify the constraint.
+        #* Use the syntactic theory to identify the constraint.
         self.id = hash(sp.srepr(clausify(self.expr)))
         
     def __hash__(self) -> int:
@@ -38,17 +38,20 @@ class Constraint(object):
     def __str__(self) -> str:
         return self.__repr__()
 
-class Model(object):
+class Theory(object):
     def __init__(self, path_to_constraints: str):
-        self.constraints = Model.load_constraints(path_to_constraints)
-        self._model = Model.create(self.constraints, path_to_constraints)
+        self.constraints = Theory.load_constraints(path_to_constraints)
+        self._thoery = Theory.create(self.constraints, path_to_constraints)
         
     def interpret(self, constraint: sp.Expr, dataset: str='cidds', reverse=False) -> sp.Expr:
-        #TODO: Yield the semantic model the formula given the mappings in domain knowledge.
+        #TODO: Yield the semantic theory the formula given the mappings in domain knowledge.
         pass
     
-    def entails(self, query: str, verbose: bool=True) -> bool:
-        """Proof system for entailment checking."""
+    def proves(self, query: str, verbose: bool=True) -> bool:
+        """Checks the existence of a proof of query from theory (syntactic consequence).
+        
+        We use a Fitch proof system, which is sound and complete for propositional logic.
+        """
         query = sp.sympify(query)
         if verbose:
             pprint("Query:", query, sep='\t')
@@ -81,12 +84,12 @@ class Model(object):
         sats = [
             ~sp.Xor(
                 bool(satisfiable(
-                    #* Both the model and query should in clausal form already.
+                    #* Both the theory and query should in clausal form already.
                     # clausify(
                         #* Proof by Resolution rule of Inference: 
                         #*  To determine whether a set of sentences KB logically entails a sentence q, 
                         #*  rewrite KB\/{~q} in clausal form and try to derive the empty clause.
-                        sp.And(self._model, ~q)
+                        sp.And(self._thoery, ~q)
                         #^ Same as below:
                         # sp.Not(sp.Or(~self._model, q))
                     # )
@@ -101,7 +104,7 @@ class Model(object):
         end = perf_counter()
         
         if verbose:
-            pprint("Entailed by model:", entailed, sep=' ')
+            pprint("Entailed by theory:", entailed, sep=' ')
             pprint(f"Inference time:\t{end-start:.2f} s")
         return entailed
     
@@ -111,16 +114,16 @@ class Model(object):
         path: str,
         save=True,
     ) -> sp.Expr:
-        log.info("Creating model...")
-        #* Take the last part of the path w/o extension as the model name.
+        log.info("Creating theory...")
+        #* Take the last part of the path w/o extension as the theory name.
         modelname = path.split('/')[-1].split('.')[0]
         modelpath = f"models/{modelname}.pkl"
-        #* Check if the model is already created.
+        #* Check if the theory is already created.
         if Path(modelpath).exists():
             with open(modelpath, 'rb') as f:
-                model = pickle.load(f)
-            log.info(f"Model loaded from {modelpath}")
-            return model
+                theory = pickle.load(f)
+            log.info(f"Theory loaded from {modelpath}")
+            return theory
         
         constraints = list(constraints)
         if type(constraints[0]) == Constraint:
@@ -128,20 +131,22 @@ class Model(object):
         
         simplified = []
         for constraint in tqdm(constraints):
-            #! To create syntactic model from semantic constraints, we must desugar them.
+            #! To create syntactic theory from semantic constraints, we must desugar them.
             #* Semantic land -> Syntactic land
             simplified.append(clausify(constraint))
-        model = sp.simplify_logic(sp.And(*simplified), form='cnf', deep=True)
-        log.info(f"Model size {len(simplified)}")
+            
+        #& A constraint theory (syntactical) is conjucts of clauses consistent with the data.
+        theory = sp.simplify_logic(sp.And(*simplified), form='cnf', deep=True)
+        log.info(f"Theory size {len(simplified.args)}")
         if save:
-            Model.save_model(model, modelpath)
-        return model
+            Theory.save_thoery(theory, modelpath)
+        return theory
     
     @staticmethod
-    def save_model(model: sp.Expr, path: str='models/model.pkl') -> None:
+    def save_thoery(theory: sp.Expr, path: str='models/theory.pkl') -> None:
         with open(f"{path}", 'wb') as f:
-            pickle.dump(model, f, protocol=pickle.HIGHEST_PROTOCOL)
-        log.info(f"Model saved to {path}")
+            pickle.dump(theory, f, protocol=pickle.HIGHEST_PROTOCOL)
+        log.info(f"Theory saved to {path}")
     
     @staticmethod
     def save_constraints(constraints: List[sp.Expr]|Set[sp.Expr], path: str='constraints.rule'):
@@ -165,9 +170,9 @@ class Model(object):
         with open(f"{path}", 'r') as f:
             for i, line in enumerate(f):
                 expr = sp.sympify(line.strip())
-                #! Ignore equality constraints (from prior) as they are too strong.
-                if type(expr) in [sp.Equality]:
-                    continue
+                # #! Ignore equality constraints (from prior) as they are too strong.
+                # if type(expr) in [sp.Equality]:
+                #     continue
                 # if not is_purely_or(expr):
                 #     constraints.append(expr)
                 #     print(f"Loaded {i+1} constraints", end='\r')

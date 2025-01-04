@@ -4,7 +4,7 @@ import pytest
 from tqdm import tqdm
 from rich import print as pprint
 
-from anuta.model import Model
+from anuta.theory import Theory
 
 
 @pytest.fixture
@@ -15,13 +15,13 @@ def cases() -> List[Dict[str, str]]:
         return json.load(f)
 
 @pytest.fixture
-def model() -> Model:
+def theory() -> Theory:
     modelpath = 'data/results/cidds/versionspace/learned_150_a3.rule'
     # modelpath = 'data/results/cidds/dc/learned_100.rule'
     # modelpath = 'learned_100_a3_mac.rule'
-    return Model(modelpath)
+    return Theory(modelpath)
 
-def test_queries(cases: List[Dict[str, str]], model: Model) -> None:
+def test_queries(cases: List[Dict[str, str]], theory: Theory) -> None:
     """Test that prints the description of each query."""
     successes = 0
     total_queries = 0
@@ -34,7 +34,7 @@ def test_queries(cases: List[Dict[str, str]], model: Model) -> None:
 
         new_successes = 0
         for query in cases:
-            entailed = model.entails(query, verbose=False)
+            entailed = theory.proves(query, verbose=False)
             # assert entailed, f"Failed Test #{i}"
             if entailed:
                 new_successes += 1

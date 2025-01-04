@@ -67,7 +67,7 @@ class Constructor(object):
 class Cidds001(Constructor):
     def __init__(self, filepath) -> None:
         log.info(f"Loading data from {filepath}")
-        self.df = pd.read_csv(filepath)
+        self.df = pd.read_csv(filepath).iloc[:, :11]
         #* Discard the timestamps for now, and Flows is always 1.
         self.df = self.df.drop(columns=['Date first seen', 'Flows'])
         col_to_var = {col: to_big_camelcase(col) for col in self.df.columns}
