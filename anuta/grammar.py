@@ -528,9 +528,9 @@ class Anuta(object):
                                 #* Learn negation assignment as a fact, i.e., this constant is not in the domain.
                                 ne_priors.append(neg_constraint.expr)
                                 self.num_candidates_rejected += 1
-                        if eq_priors:
-                            #* Add the prior knowledge (X=1 | X=2 | ...)
-                            self.prior.add(Constraint(sp.Or(*eq_priors)))
+                        # if eq_priors:
+                        #     #* Add the prior knowledge (X=1 | X=2 | ...)
+                        #     self.prior.add(Constraint(sp.Or(*eq_priors)))
                         if ne_priors:
                             #* Add the prior knowledge (X!=1 & X!=2 & ...)
                             #! AND for values not in the domain.
@@ -565,9 +565,9 @@ class Anuta(object):
                         eq_priors.append(constraint.expr)
                         yield constraint
                         yield neg_constraint
-                    if eq_priors:
-                        #* Add the prior knowledge (X=1 | X=2 | ...)
-                        self.prior.add(Constraint(sp.Or(*eq_priors)))
+                    # if eq_priors:
+                    #     #* Add the prior knowledge (X=1 | X=2 | ...)
+                    #     self.prior.add(Constraint(sp.Or(*eq_priors)))
                 elif domain.kind == DomainType.NUMERICAL: 
                     #* For numerical vars w/o associated constants, use the unary identity (NOP).
                     identity = Constraint(var)

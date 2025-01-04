@@ -117,7 +117,7 @@ class Theory(object):
         log.info("Creating theory...")
         #* Take the last part of the path w/o extension as the theory name.
         modelname = path.split('/')[-1].split('.')[0]
-        modelpath = f"models/{modelname}.pkl"
+        modelpath = f"theories/{modelname}.pkl"
         #* Check if the theory is already created.
         if Path(modelpath).exists():
             with open(modelpath, 'rb') as f:
@@ -137,13 +137,13 @@ class Theory(object):
             
         #& A constraint theory (syntactical) is conjucts of clauses consistent with the data.
         theory = sp.simplify_logic(sp.And(*simplified), form='cnf', deep=True)
-        log.info(f"Theory size {len(simplified.args)}")
+        log.info(f"Theory size {len(theory.args)}")
         if save:
             Theory.save_thoery(theory, modelpath)
         return theory
     
     @staticmethod
-    def save_thoery(theory: sp.Expr, path: str='models/theory.pkl') -> None:
+    def save_thoery(theory: sp.Expr, path: str='theories/theory.pkl') -> None:
         with open(f"{path}", 'wb') as f:
             pickle.dump(theory, f, protocol=pickle.HIGHEST_PROTOCOL)
         log.info(f"Theory saved to {path}")
