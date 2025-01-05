@@ -20,7 +20,7 @@ def theory() -> Theory:
     # modelpath = 'data/results/cidds/dc/learned_100.rule'
     # modelpath = 'learned_100_a3_mac.rule'
     modelpath = 'data/results/cidds/normal/learned_500_a3.rule'
-    modelpath = 'data/results/cidds/attacks/learned_500_a3.rule'
+    # modelpath = 'data/results/cidds/attacks/learned_500_a3.rule'
     modelpath = 'data/results/cidds/attacks/learned_1000_a3.rule'
     return Theory(modelpath)
 
@@ -42,7 +42,7 @@ def test_queries(cases: List[Dict[str, str]], theory: Theory) -> None:
             if entailed:
                 new_successes += 1
             else:
-                print(f"Failed Test #{i}")
+                print(f"Failed Test #{i+1}")
                 pprint("\t", query)
                 print(f"\t{q['description']}")
         if new_successes == nqueries:

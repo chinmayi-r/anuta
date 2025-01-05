@@ -29,7 +29,8 @@ if __name__ == '__main__':
     # main(millisampler, sys.argv[1])
     
     filepath = f"data/cidds_wk2_attacks.csv"
-    # filepath = f"data/cidds_wk3_processed.csv"
+    filepath = f"data/cidds_wk2_all.csv"
+    # filepath = f"data/cidds_wk3_all.csv"
     cidds = Cidds001(filepath)
     limit = 0
     if sys.argv[1] == 'all':
