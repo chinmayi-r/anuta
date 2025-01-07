@@ -187,10 +187,14 @@ def validator(constructor: Constructor, rules: List[sp.Expr]):
     
     violation_counter = Counter(aggregated_violations)
     pprint(violation_counter)
-    violation_rate = violation_counter[0] / len(aggregated_violations)
+    violation_rate = violation_counter[True] / len(aggregated_violations)
+    
+    #* Save violated rules
+    violated_rules = [rules[i] for i, is_violated in enumerate(aggregated_violations) if is_violated]
+    Theory.save_constraints(violated_rules, 'violated')
     
     log.info(f"Violatioin rate: {violation_rate:.3%}")
-    log.info(f"Validation time: {end-start:.2f}s\n\n")
+    log.info(f"Runtime time: {end-start:.2f}s\n\n")
     
 
 def miner_versionspace(constructor: Constructor, limit: int):
