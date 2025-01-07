@@ -109,7 +109,7 @@ def save_constraints(constraints: List[sp.Expr], fname: str='constraints'):
     #     json.dump({k: (v.lb, v.ub) for k, v in bounds.items()}, f)
     #     print(f"Saved to {fname}_bounds.json")
 
-def load_constraints(fname: str='constraints'):
+def load_constraints(fname: str='constraints') -> List[sp.Expr]:
     constraints = []
     with open(f"{fname}.rule", 'r') as f:
         for line in f:

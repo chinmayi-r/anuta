@@ -107,7 +107,7 @@ def test_candidates(
             if not fcount[nxt_var]:
                 del fcount[nxt_var]
         
-        sample = dfpartition.iloc[index]
+        sample: pd.Series = dfpartition.iloc[index]
         assignments = {}
         for name, val in sample.items():
             var = anuta.variables.get(name)
@@ -132,6 +132,66 @@ def test_candidates(
     pprint(dict(exhausted_values))
     return violations
 
+def validate(
+    worker_idx: int, 
+    dfpartition: pd.DataFrame,
+    rules: List[sp.Expr]
+) -> List[int]:
+    log.info(f"Worker {worker_idx+1} started.")
+    #* 1: Violated, 0: Not violated
+    violations = [0 for _ in range(len(rules))]
+    
+    for i, sample in tqdm(dfpartition.iterrows(), total=len(dfpartition)):
+        assignments = sample.to_dict()
+        for k, rule in enumerate(rules):
+            if violations[k]: 
+                #* This constraint has already been violated.
+                continue
+            #* Evaluate the constraint with the given assignments
+            sat = rule.subs(assignments)
+            if not sat:
+                violations[k] = 1
+    log.info(f"Worker {worker_idx+1} finished.")
+    return violations
+
+def validator(constructor: Constructor, rules: List[sp.Expr]):
+    start = perf_counter()
+    
+    #* Prepare arguments for parallel processing
+    nworkers = core_count = psutil.cpu_count()
+    dfpartitions = [df.reset_index(drop=True) for df in np.array_split(constructor.df, core_count)]
+    
+    if len(rules) <= core_count:
+        #* Avoid parallel overhead if the number of rules is small.
+        nworkers = 1
+    
+    # nworkers = 1
+    log.info(f"Spawning {nworkers} workers for validation ...")
+    if nworkers > 1:
+        #* Prepare arguments for parallel processing
+        args = [(i, df, rules) for i, df in enumerate(dfpartitions)]
+        pool = Pool(core_count)
+        log.info(f"Validating constraints in parallel ...")
+        violation_indices = pool.starmap(validate, args)
+        log.info(f"All workers finished.")
+        pool.close()
+    else:
+        violation_indices = validate(0, constructor.df, rules)
+    end = perf_counter()
+    
+    log.info(f"Aggregating violations ...")
+    aggregated_violations = np.logical_or.reduce(violation_indices) \
+        if nworkers > 1 else violation_indices
+    assert len(aggregated_violations) == len(rules), \
+        f"{len(aggregated_violations)=} != {len(rules)=}"
+    
+    violation_counter = Counter(aggregated_violations)
+    pprint(violation_counter)
+    violation_rate = violation_counter[0] / len(aggregated_violations)
+    
+    log.info(f"Violatioin rate: {violation_rate:.3%}")
+    log.info(f"Validation time: {end-start:.2f}s\n\n")
+    
 
 def miner_versionspace(constructor: Constructor, limit: int):
     global anuta

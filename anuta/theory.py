@@ -166,11 +166,13 @@ class Theory(object):
         log.info(f"Constraints saved to {path}/json")
 
     @staticmethod
-    def load_constraints(path: str='constraints.rule'):
+    def load_constraints(path: str='constraints.rule', wrapper=False) -> List[Constraint | sp.Expr]:
         constraints = []
         with open(f"{path}", 'r') as f:
             for i, line in enumerate(f):
-                expr = sp.sympify(line.strip())
+                expr = sp.sympify(line.strip()) if not wrapper \
+                    else Constraint(sp.sympify(line.strip()))
+                
                 # #! Ignore equality constraints (from prior) as they are too strong.
                 # if type(expr) in [sp.Equality]:
                 #     continue

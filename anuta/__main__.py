@@ -15,7 +15,8 @@ import warnings
 warnings.filterwarnings("ignore")
 
 from anuta.constructor import Constructor, Millisampler, Cidds001
-from anuta.miner import miner_versionspace, miner_valiant
+from anuta.theory import Theory
+from anuta.miner import miner_versionspace, miner_valiant, validator
 
     
 def main(constructor: Constructor, limit: int):
@@ -28,7 +29,22 @@ if __name__ == '__main__':
     # millisampler = Millisampler(filepath)
     # main(millisampler, sys.argv[1])
     
-    filepath = f"data/cidds_wk2_attacks.csv"
+    if len(sys.argv) == 4 and sys.argv[1] == 'validate':
+        n = 1000
+        rulepath = sys.argv[2]
+        assert rulepath.endswith('.rule'), "Invalid rule file."
+        rules = Theory.load_constraints(rulepath, False)
+        
+        validation_data = sys.argv[3]
+        assert validation_data.endswith('.csv'), "Invalid validation data."
+        cidds = Cidds001(validation_data)
+        cidds.df = cidds.df.sample(n=n, random_state=42).reset_index(drop=True)
+        
+        validator(cidds, rules)
+        sys.exit(0)
+        
+    
+    filepath = f"data/cidds_wk2_attack.csv"
     filepath = f"data/cidds_wk2_all.csv"
     # filepath = f"data/cidds_wk3_all.csv"
     cidds = Cidds001(filepath)
