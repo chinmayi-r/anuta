@@ -377,7 +377,7 @@ class Anuta(object):
                     else:
                         new_candidates.add(composite)
                     
-                    print(f"Proposed {len(new_candidates)} arity-{self.search_arity} (in)equality implications.", end='\r')
+                    print(f"Proposed # of arity-{self.search_arity} (in)equality implications:\t{len(new_candidates)}", end='\r')
             log.info(f"Proposed {len(new_candidates)} arity-{self.search_arity} (in)equality implications.")
             cur_ncandidates = len(new_candidates)
             
@@ -413,10 +413,14 @@ class Anuta(object):
                 #     new_candidates.add(composite)
             for literal in equality_literals:
                 for specialized_bound in arity2_bounds:
+                    if Constraint(specialized_bound) in self.kb: 
+                        #^ Prevent redundancy: If `Bytes >= 42*Packets` is learned, 
+                        #^  don't learn any `... => (Bytes >= 42*Packets)`.
+                        continue
                     #* (A≠a) => (specialized rejeceted bound: sX≥sY)
                     composite = Constraint( literal >> specialized_bound )
                     new_candidates.add(composite)
-                print(f"Proposed {len(new_candidates)} arity-{self.search_arity} implications w/ bounds.", end='\r')
+                print(f"Proposed # of arity-{self.search_arity} implications w/ bounds:\t{len(new_candidates)}", end='\r')
             log.info(f"Proposed {len(new_candidates)-cur_ncandidates} arity-{self.search_arity} implications w/ bounds")
             
         elif self.search_arity == 3:            
@@ -500,9 +504,8 @@ class Anuta(object):
     
     def generate_literals(self) -> Generator[Constraint, None, None]:
         for name, var in self.variables.items():
-            # var_prior = []
             if name in self.constants:
-                #* If the var has associated constants, don't enumerate its domain (often too large).
+                #& If the var has associated constants, don't enumerate its domain (often too large).
                 match self.constants[name].kind:
                     case ConstantType.ASSIGNMENT:
                         eq_priors: List[Constraint] = []
@@ -528,9 +531,9 @@ class Anuta(object):
                                 #* Learn negation assignment as a fact, i.e., this constant is not in the domain.
                                 ne_priors.append(neg_constraint.expr)
                                 self.num_candidates_rejected += 1
-                        if eq_priors:
-                            #* Add the prior knowledge (X=1 | X=2 | ...)
-                            self.prior.add(Constraint(sp.Or(*eq_priors)))
+                        # if eq_priors:
+                        #     #* Add the prior knowledge (X=1 | X=2 | ...)
+                        #     self.prior.add(Constraint(sp.Or(*eq_priors)))
                         if ne_priors:
                             #* Add the prior knowledge (X!=1 & X!=2 & ...)
                             #! AND for values not in the domain.
@@ -549,6 +552,7 @@ class Anuta(object):
                     case _:
                         raise NotImplementedError(f"Unsupported constant: {self.constants[name]}")
             else:
+                #& Variables w/o associated constants.
                 domain = self.domains[name]
                 if domain.kind == DomainType.CATEGORICAL:
                     eq_priors: List[Constraint] = []
@@ -565,9 +569,9 @@ class Anuta(object):
                         eq_priors.append(constraint.expr)
                         yield constraint
                         yield neg_constraint
-                    if eq_priors:
-                        #* Add the prior knowledge (X=1 | X=2 | ...)
-                        self.prior.add(Constraint(sp.Or(*eq_priors)))
+                    # if eq_priors:
+                    #     #* Add the prior knowledge (X=1 | X=2 | ...)
+                    #     self.prior.add(Constraint(sp.Or(*eq_priors)))
                 elif domain.kind == DomainType.NUMERICAL: 
                     #* For numerical vars w/o associated constants, use the unary identity (NOP).
                     identity = Constraint(var)

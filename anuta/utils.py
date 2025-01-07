@@ -90,9 +90,10 @@ def consecutive_combinations(lst):
     
     return ccombo
 
-def to_big_camelcase(string) -> str:
-    words = string.split()
-    return ''.join(word.capitalize() for word in words)
+def to_big_camelcase(string: str, sep=' ') -> str:
+    words = string.split(sep)
+    return ''.join(word.capitalize() for word in words) \
+        if len(words) > 1 else string.capitalize()
 
 def save_constraints(constraints: List[sp.Expr], fname: str='constraints'):
     # Convert expressions to strings

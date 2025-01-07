@@ -121,8 +121,9 @@ class Theory(object):
         # #* Check if the theory is already created.
         # if Path(modelpath).exists():
         #     with open(modelpath, 'rb') as f:
-        #         theory = pickle.load(f)
+        #         theory: sp.Expr = pickle.load(f)
         #     log.info(f"Theory loaded from {modelpath}")
+        #     log.info(f"Theory size {len(theory.args)}")
         #     return theory
         
         constraints = list(constraints)
@@ -179,6 +180,6 @@ class Theory(object):
                 # else:
                 #     print(f"Skipping DNF clause: {expr}")
                 constraints.append(expr)
-                print(f"Loaded {i+1} constraints", end='\r')
+                print(f"Loaded # of constraints:\t{i+1}", end='\r')
         log.info(f"Loaded {len(constraints)} constraints from {path}")
         return constraints
