@@ -154,7 +154,7 @@ def validate(
     log.info(f"Worker {worker_idx+1} finished.")
     return violations
 
-def validator(constructor: Constructor, rules: List[sp.Expr]):
+def validator(constructor: Constructor, rules: List[sp.Expr], learned_from: int):
     start = perf_counter()
     
     #* Prepare arguments for parallel processing
@@ -191,7 +191,7 @@ def validator(constructor: Constructor, rules: List[sp.Expr]):
     
     #* Save violated rules
     violated_rules = [rules[i] for i, is_violated in enumerate(aggregated_violations) if is_violated]
-    Theory.save_constraints(violated_rules, 'violated')
+    Theory.save_constraints(violated_rules, f"violated_{learned_from}.rule")
     
     log.info(f"Violatioin rate: {violation_rate:.3%}")
     log.info(f"Runtime time: {end-start:.2f}s\n\n")

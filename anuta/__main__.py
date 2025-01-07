@@ -37,11 +37,12 @@ if __name__ == '__main__':
         
         validation_data = sys.argv[3]
         assert validation_data.endswith('.csv'), "Invalid validation data."
+        learned_from = int(rulepath.split('_')[-2])
         cidds = Cidds001(validation_data)
         cidds.df = cidds.df.sample(n=n, random_state=42).reset_index(drop=True)
         
         print(f"Validating {n} samples from {validation_data} using {rulepath}")
-        validator(cidds, rules)
+        validator(cidds, rules, learned_from)
         sys.exit(0)
         
     
