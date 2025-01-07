@@ -40,6 +40,7 @@ if __name__ == '__main__':
         cidds = Cidds001(validation_data)
         cidds.df = cidds.df.sample(n=n, random_state=42).reset_index(drop=True)
         
+        print(f"Validating {n} samples from {validation_data} using {rulepath}")
         validator(cidds, rules)
         sys.exit(0)
         
