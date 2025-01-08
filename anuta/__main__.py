@@ -48,7 +48,7 @@ if __name__ == '__main__':
     
     filepath = f"data/cidds_wk2_attack.csv"
     filepath = f"data/cidds_wk2_all.csv"
-    # filepath = f"data/cidds_wk3_all.csv"
+    filepath = f"data/cidds_wk3_all.csv"
     cidds = Cidds001(filepath)
     limit = 0
     if sys.argv[1] == 'all':
