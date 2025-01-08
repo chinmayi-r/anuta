@@ -19,9 +19,9 @@ from anuta.theory import Theory
 from anuta.miner import miner_versionspace, miner_valiant, validator
 
     
-def main(constructor: Constructor, limit: int):
+def main(constructor: Constructor, refconstructor: Constructor, limit: int):
     # miner_valiant(constructor, limit)
-    miner_versionspace(constructor, limit)
+    miner_versionspace(constructor, refconstructor, limit)
 
 if __name__ == '__main__':
     # boundsfile = f"./data/meta_bounds.json"
@@ -58,5 +58,6 @@ if __name__ == '__main__':
     else:
         # cidds.df = cidds.df.sample(n=int(sys.argv[1]), random_state=42)
         limit = int(sys.argv[1])
-    main(cidds, limit)
+    refcidds = Cidds001("data/cidds_wk4_all.csv")
+    main(cidds, refcidds, limit)
     sys.exit(0)

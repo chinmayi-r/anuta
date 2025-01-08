@@ -42,7 +42,12 @@ def validate(
     log.info(f"Worker {worker_idx+1} finished.")
     return violations
 
-def validator(constructor: Constructor, rules: List[sp.Expr], learned_from: int):
+def validator(
+    constructor: Constructor, 
+    rules: List[sp.Expr], 
+    learned_from: int=0, 
+    save=True
+) -> float:
     start = perf_counter()
     
     #* Prepare arguments for parallel processing
@@ -79,17 +84,57 @@ def validator(constructor: Constructor, rules: List[sp.Expr], learned_from: int)
     
     #* Save violated rules
     violated_rules = [rules[i] for i, is_violated in enumerate(aggregated_violations) if is_violated]
-    Theory.save_constraints(violated_rules, f"violated_{learned_from}.rule")
+    valid_rules = [rules[i] for i, is_violated in enumerate(aggregated_violations) if not is_violated]
+    if save:
+        Theory.save_constraints(violated_rules, f"violated_{learned_from}.rule")
     
     log.info(f"Violatioin rate: {violation_rate:.3%}")
     log.info(f"Runtime time: {end-start:.2f}s\n\n")
     
+    return violation_rate, valid_rules
+
+def validate_candidates(
+        constructor: Constructor,
+        test_size: int = 1000,
+        iteration_limit: int = 10,
+) -> List[Constraint]:
+    global anuta
+    assert anuta, "anuta is not initialized."
+    start = perf_counter()
+    
+    refdf = constructor.df.copy()
+    rules = [constraint.expr for constraint in anuta.kb]
+    before_nrules = len(rules)
+    
+    it = 0
+    while it < iteration_limit:
+        it += 1
+        log.info(f"Validation Iteration: {it}")
+        #* Sample a subset of the data
+        df = refdf.sample(n=test_size, replace=False, random_state=42)
+        refdf.drop(df.index, inplace=True)
+        
+        constructor.df = df
+        violation_rate, valid_rules = validator(constructor, rules, save=False)
+        log.info(f"(iteration {it}) Violation rate: {violation_rate:.3%}")
+        if violation_rate == 0:
+            log.info(f"Finished validating all candidates.")
+            break
+        else:
+            log.info(f"Validating remaining candidates ...")
+            rules = valid_rules
+    #> End of while loop
+    end = perf_counter()
+    log.info(f"Validation time (total {it} iters): {end-start:.2f}s\n\n")
+    log.info(f"Removed # candidates: {before_nrules - len(rules)}")
+    return set([Constraint(rule) for rule in rules])
+
 def test_candidates(
         worker_idx: int, dfpartition: pd.DataFrame, 
         indexset: dict[str, dict[str, np.ndarray]], 
         fcount: dict[str, dict[str, DomainCounter]], 
         limit: int, #* limit ≤ len(dfpartition)
-    ) -> List[int]:
+) -> List[int]:
     global anuta
     assert anuta, "anuta is not initialized."
     
@@ -145,7 +190,7 @@ def test_candidates(
     pprint(dict(exhausted_values))
     return violations
 
-def miner_versionspace(constructor: Constructor, limit: int):
+def miner_versionspace(constructor: Constructor, refconstructor: Constructor, limit: int):
     global anuta
     #* Use a global var to prevent passing the object to each worker.
     anuta = constructor.anuta
@@ -220,45 +265,36 @@ def miner_versionspace(constructor: Constructor, limit: int):
         log.info(f"Learned {new_size-old_size} candidates.")
     #> End of while loop
     end = perf_counter()
-    
-    # #& Learn all remaining candidates (not violated by any example at the last level).
-    # anuta.kb |= set(anuta.candidates)
     log.info(f"Finished mining all constraints up to arity {anuta.search_arity}.")
-    
-    # aggregated_violations = np.logical_or.reduce(violation_indices)
-    # # aggregated_bounds = {k: IntBounds(sys.maxsize, 0) for k in anuta.bounds.keys()}
-    # learned_kb = []
-    # log.info(f"Aggregating violations ...")
-    # #* Update learned_kb based on the violated constraints
-    # for index, is_violated in tqdm(enumerate(aggregated_violations), total=len(aggregated_violations)):
-    #     if not is_violated:
-    #         learned_kb.append(anuta.initial_kb[index])
 
-    # pprint(aggregated_bounds)
     print(f"Total proposed: {anuta.num_candidates_proposed}")
     print(f"Total rejected: {anuta.num_candidates_rejected} ({anuta.num_candidates_rejected/anuta.num_candidates_proposed:.2%})")
     print(f"Total prior: {len(anuta.prior)}")
     print(f"Total learned: {len(anuta.kb)} ({len(anuta.kb)/anuta.num_candidates_proposed:.2%})")
-    #* Prior: [(X=2 & X!=3 & ...), (Y=500 & Y=400 & ...)]
+    
+    anuta.kb = validate_candidates(refconstructor)
+    print(f"Final learned: {len(anuta.kb)} ({len(anuta.kb)/anuta.num_candidates_proposed:.2%})")
+    
+    #* Prior: [(X!=2 & X!=3 & ...), (Y=500 | Y=400 | ...)]
     Theory.save_constraints(anuta.kb | anuta.prior, f'learned_{label}_a{ARITY_LIMIT}.rule')
     print(f"Runtime: {end-start:.2f}s\n\n")
     
-    if len(anuta.kb) <= 200: 
-        #^ Skip pruning if the number of constraints is too large
-        log.info(f"Pruning redundant constraints ...")
-        start = perf_counter()
-        # assumptions = [v >= 0 for v in anuta.variables.values()]
-        assumptions = anuta.prior
-        cnf = sp.And(*(anuta.kb | set(assumptions)))
-        simplified_logic = sp.to_cnf(clausify(cnf))
-        reduced_kb = list(simplified_logic.args) \
-            if isinstance(simplified_logic, sp.And) else [simplified_logic]
-        pruned_count = len(anuta.kb) - len(reduced_kb)
-        end = perf_counter()
-        print(f"{len(anuta.kb)=}, {len(reduced_kb)=} ({pruned_count=})\n")
-        print(f"Pruning time: {end-start:.2f}s\n\n")
+    # if len(anuta.kb) <= 200: 
+    #     #^ Skip pruning if the number of constraints is too large
+    #     log.info(f"Pruning redundant constraints ...")
+    #     start = perf_counter()
+    #     # assumptions = [v >= 0 for v in anuta.variables.values()]
+    #     assumptions = anuta.prior
+    #     cnf = sp.And(*(anuta.kb | set(assumptions)))
+    #     simplified_logic = sp.to_cnf(clausify(cnf))
+    #     reduced_kb = list(simplified_logic.args) \
+    #         if isinstance(simplified_logic, sp.And) else [simplified_logic]
+    #     pruned_count = len(anuta.kb) - len(reduced_kb)
+    #     end = perf_counter()
+    #     print(f"{len(anuta.kb)=}, {len(reduced_kb)=} ({pruned_count=})\n")
+    #     print(f"Pruning time: {end-start:.2f}s\n\n")
         
-        Theory.save_constraints(anuta.kb, f'pruned_{label}_a{ARITY_LIMIT}.rule')
+    #     Theory.save_constraints(anuta.kb, f'pruned_{label}_a{ARITY_LIMIT}.rule')
 
 def miner_valiant(constructor: Constructor, limit: int = 0):
     global anuta
