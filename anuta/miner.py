@@ -19,118 +19,6 @@ from anuta.utils import log, clausify, save_constraints
 
 
 anuta : Anuta = None
-window = 10
-    
-def test_millisampler_constraints(worker_idx: int, dfpartition: pd.DataFrame) -> List[int]:
-    global anuta
-    assert anuta, "anuta is not initialized."
-    
-    # var_bounds = anuta.bounds
-    
-    log.info(f"Worker {worker_idx+1} started.")
-    #* 1: Violated, 0: Not violated
-    violations = [0 for _ in range(len(anuta.initial_kb))]
-    
-    for i, sample in tqdm(dfpartition.iterrows(), total=len(dfpartition)):
-        # print(f"Testing with sample {j+1}/{len(dfpartition)}.", end='\r')
-        canary_max = sample.iloc[-window:].max()
-        canary_premise = i % 2 #* 1: old index, 0: even index
-        canary_conclusion = anuta.constants['burst_threshold'] + 1 if canary_premise else 0
-        assignments = {}
-        #* Assign the canary variables
-        for cannary in anuta.canary_vars:
-            if 'max' in cannary.name:
-                assignments[cannary] = canary_max
-            elif 'premise' in cannary.name:
-                assignments[cannary] = canary_premise
-            elif 'conclusion' in cannary.name:
-                assignments[cannary] = canary_conclusion
-        for name, val in sample.items():
-            var = anuta.variables.get(name)
-            if not var: continue
-            assignments[var] = val
-            
-            # bounds = var_bounds.get(name)
-            # if bounds and (val < bounds.lb or val > bounds.ub):
-            #     #* Learn the bounds
-            #     # mutex.acquire()
-            #     # print(f"Updating bounds for {name}: [{bounds.lb}, {bounds.ub}]")
-            #     var_bounds[name] = IntBounds(
-            #         min(bounds.lb, val), max(bounds.ub, val))
-            #     # print(f"Updated bounds for {name}: [{var_bounds[name].lb}, {var_bounds[name].ub}]")
-            #     # mutex.release()
-        
-        for k, constraint in enumerate(anuta.initial_kb):
-            if violations[k]: 
-                #* This constraint has already been violated.
-                continue
-            #* Evaluate the constraint with the given assignments
-            sat = constraint.subs(assignments | anuta.constants)
-            if not sat:
-                violations[k] = 1
-    log.info(f"Worker {worker_idx+1} finished.")
-    return violations
-
-def test_candidates(
-        worker_idx: int, dfpartition: pd.DataFrame, 
-        indexset: dict[str, dict[str, np.ndarray]], 
-        fcount: dict[str, dict[str, DomainCounter]], 
-        limit: int, #* limit ≤ len(dfpartition)
-    ) -> List[int]:
-    global anuta
-    assert anuta, "anuta is not initialized."
-    
-    log.info(f"Worker {worker_idx+1} started.")
-    #* 1: Violated, 0: Not violated
-    violations = [0 for _ in range(len(anuta.candidates))]
-    exhausted_values = defaultdict(list)
-    exhausted_values[f"Worker {worker_idx}"] = 'Exhausted Domain Values'
-    
-    for i in tqdm(range(limit), total=limit):
-        '''Domain Counting'''
-        #* Get the vars at every iteration to account for the changes in the indexset.
-        indexed_vars = list(fcount.keys())
-        #* Cycle through the vars, treating them equally (no bias).
-        nxt_var = indexed_vars[i % len(indexed_vars)]
-        #* Find the least frequent value of the next variable.
-        least_freq_val = min(fcount[nxt_var], key=fcount[nxt_var].get)
-        #& Get the 1st from the indices of least frequent value (inductive bias).
-        #TODO: Choose randomly from the indices?
-        indices = indexset[nxt_var][least_freq_val]
-        #^ Somehow ndarray passes by value (unlike list) ...
-        index, indexset[nxt_var][least_freq_val] = indices[0], indices[1: ]
-        if indexset[nxt_var][least_freq_val].size == 0:
-            #* Remove the corresponding counter if the value is exhausted 
-            #* to prevent further sampling (from empty sets).
-            del fcount[nxt_var][least_freq_val]
-            exhausted_values[nxt_var].append(least_freq_val)
-            if not fcount[nxt_var]:
-                del fcount[nxt_var]
-        
-        sample: pd.Series = dfpartition.iloc[index]
-        assignments = {}
-        for name, val in sample.items():
-            var = anuta.variables.get(name)
-            if not var: continue
-            assignments[var] = val
-            
-            #* Increment the frequency count of the value of the var.
-            if name in fcount and val in fcount[name]:
-                fcount[name][val].count += 1
-        
-        for k, constraint in enumerate(anuta.candidates):
-            if violations[k]: 
-                #* This constraint has already been violated.
-                continue
-            #* Evaluate the constraint with the given assignments
-            sat = constraint.expr.subs(assignments)
-            if not sat:
-                # log.info(f"Violated: {constraint}")
-                violations[k] = 1
-        
-    log.info(f"Worker {worker_idx+1} finished.")
-    pprint(dict(exhausted_values))
-    return violations
 
 def validate(
     worker_idx: int, 
@@ -196,6 +84,66 @@ def validator(constructor: Constructor, rules: List[sp.Expr], learned_from: int)
     log.info(f"Violatioin rate: {violation_rate:.3%}")
     log.info(f"Runtime time: {end-start:.2f}s\n\n")
     
+def test_candidates(
+        worker_idx: int, dfpartition: pd.DataFrame, 
+        indexset: dict[str, dict[str, np.ndarray]], 
+        fcount: dict[str, dict[str, DomainCounter]], 
+        limit: int, #* limit ≤ len(dfpartition)
+    ) -> List[int]:
+    global anuta
+    assert anuta, "anuta is not initialized."
+    
+    log.info(f"Worker {worker_idx+1} started.")
+    #* 1: Violated, 0: Not violated
+    violations = [0 for _ in range(len(anuta.candidates))]
+    exhausted_values = defaultdict(list)
+    exhausted_values[f"Worker {worker_idx}"] = 'Exhausted Domain Values'
+    
+    for i in tqdm(range(limit), total=limit):
+        '''Domain Counting'''
+        #* Get the vars at every iteration to account for the changes in the indexset.
+        indexed_vars = list(fcount.keys())
+        #* Cycle through the vars, treating them equally (no bias).
+        nxt_var = indexed_vars[i % len(indexed_vars)]
+        #* Find the least frequent value of the next variable.
+        least_freq_val = min(fcount[nxt_var], key=fcount[nxt_var].get)
+        #& Get the 1st from the indices of least frequent value (inductive bias).
+        #TODO: Choose randomly from the indices?
+        indices = indexset[nxt_var][least_freq_val]
+        #^ Somehow ndarray passes by value (unlike list) ...
+        index, indexset[nxt_var][least_freq_val] = indices[0], indices[1: ]
+        if indexset[nxt_var][least_freq_val].size == 0:
+            #* Remove the corresponding counter if the value is exhausted 
+            #* to prevent further sampling (from empty sets).
+            del fcount[nxt_var][least_freq_val]
+            exhausted_values[nxt_var].append(least_freq_val)
+            if not fcount[nxt_var]:
+                del fcount[nxt_var]
+        
+        sample: pd.Series = dfpartition.iloc[index]
+        assignments = {}
+        for name, val in sample.items():
+            var = anuta.variables.get(name)
+            if not var: continue
+            assignments[var] = val
+            
+            #* Increment the frequency count of the value of the var.
+            if name in fcount and val in fcount[name]:
+                fcount[name][val].count += 1
+        
+        for k, constraint in enumerate(anuta.candidates):
+            if violations[k]: 
+                #* This constraint has already been violated.
+                continue
+            #* Evaluate the constraint with the given assignments
+            sat = constraint.expr.subs(assignments)
+            if not sat:
+                # log.info(f"Violated: {constraint}")
+                violations[k] = 1
+        
+    log.info(f"Worker {worker_idx+1} finished.")
+    pprint(dict(exhausted_values))
+    return violations
 
 def miner_versionspace(constructor: Constructor, limit: int):
     global anuta
@@ -383,3 +331,56 @@ def miner_valiant(constructor: Constructor, limit: int = 0):
         
         anuta.learned_kb = reduced_kb + anuta.prior_kb
         Theory.save_constraints(anuta.learned_kb, f'reduced_{label}.rule')
+        
+
+window = 10
+    
+def test_millisampler_constraints(worker_idx: int, dfpartition: pd.DataFrame) -> List[int]:
+    global anuta
+    assert anuta, "anuta is not initialized."
+    
+    # var_bounds = anuta.bounds
+    
+    log.info(f"Worker {worker_idx+1} started.")
+    #* 1: Violated, 0: Not violated
+    violations = [0 for _ in range(len(anuta.initial_kb))]
+    
+    for i, sample in tqdm(dfpartition.iterrows(), total=len(dfpartition)):
+        # print(f"Testing with sample {j+1}/{len(dfpartition)}.", end='\r')
+        canary_max = sample.iloc[-window:].max()
+        canary_premise = i % 2 #* 1: old index, 0: even index
+        canary_conclusion = anuta.constants['burst_threshold'] + 1 if canary_premise else 0
+        assignments = {}
+        #* Assign the canary variables
+        for cannary in anuta.canary_vars:
+            if 'max' in cannary.name:
+                assignments[cannary] = canary_max
+            elif 'premise' in cannary.name:
+                assignments[cannary] = canary_premise
+            elif 'conclusion' in cannary.name:
+                assignments[cannary] = canary_conclusion
+        for name, val in sample.items():
+            var = anuta.variables.get(name)
+            if not var: continue
+            assignments[var] = val
+            
+            # bounds = var_bounds.get(name)
+            # if bounds and (val < bounds.lb or val > bounds.ub):
+            #     #* Learn the bounds
+            #     # mutex.acquire()
+            #     # print(f"Updating bounds for {name}: [{bounds.lb}, {bounds.ub}]")
+            #     var_bounds[name] = IntBounds(
+            #         min(bounds.lb, val), max(bounds.ub, val))
+            #     # print(f"Updated bounds for {name}: [{var_bounds[name].lb}, {var_bounds[name].ub}]")
+            #     # mutex.release()
+        
+        for k, constraint in enumerate(anuta.initial_kb):
+            if violations[k]: 
+                #* This constraint has already been violated.
+                continue
+            #* Evaluate the constraint with the given assignments
+            sat = constraint.subs(assignments | anuta.constants)
+            if not sat:
+                violations[k] = 1
+    log.info(f"Worker {worker_idx+1} finished.")
+    return violations
