@@ -45,7 +45,7 @@ def validate(
 def validator(
     constructor: Constructor, 
     rules: List[sp.Expr], 
-    learned_from: int=0, 
+    label: int=0, 
     save=True
 ) -> float:
     start = perf_counter()
@@ -86,7 +86,7 @@ def validator(
     violated_rules = [rules[i] for i, is_violated in enumerate(aggregated_violations) if is_violated]
     valid_rules = [rules[i] for i, is_violated in enumerate(aggregated_violations) if not is_violated]
     if save:
-        Theory.save_constraints(violated_rules, f"violated_{learned_from}.rule")
+        Theory.save_constraints(violated_rules, f"violated_{label}.rule")
     
     log.info(f"Violatioin rate: {violation_rate:.3%}")
     log.info(f"Runtime time: {end-start:.2f}s\n\n")

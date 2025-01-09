@@ -34,15 +34,19 @@ if __name__ == '__main__':
         rulepath = sys.argv[2]
         assert rulepath.endswith('.rule'), "Invalid rule file."
         rules = Theory.load_constraints(rulepath, False)
+        rule_label = int(rulepath.split('_')[-2])
         
         validation_data = sys.argv[3]
         assert validation_data.endswith('.csv'), "Invalid validation data."
-        learned_from = int(rulepath.split('_')[-2])
         cidds = Cidds001(validation_data)
-        cidds.df = cidds.df.sample(n=n, random_state=42).reset_index(drop=True)
+        data_label = validation_data.split('/')[-1].split('.')[-2]
+        if 'syn' in validation_data:
+            n = None
+        cidds.df = cidds.df.sample(n=n, random_state=42).reset_index(drop=True)\
+            if n is not None else cidds.df
         
         print(f"Validating {n} samples from {validation_data} using {rulepath}")
-        validator(cidds, rules, learned_from)
+        validator(cidds, rules, f"{data_label}-{rule_label}")
         sys.exit(0)
         
     

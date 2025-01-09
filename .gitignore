@@ -183,6 +183,7 @@ poetry.toml
 # LSP config files
 pyrightconfig.json
 *.rule
+data/syn/
 
 ### venv ###
 # Virtualenv
