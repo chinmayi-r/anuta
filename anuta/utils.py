@@ -2,6 +2,7 @@ import logging
 import json
 from typing import *
 import sympy as sp
+import pandas as pd
 
 
 true = sp.logic.true
@@ -17,6 +18,59 @@ formatter = logging.Formatter(
 handler.setFormatter(formatter)
 log.addHandler(handler)
 log.setLevel(logging.INFO)
+
+
+def generate_sliding_windows(df: pd.DataFrame, stride: int, window: int) -> pd.DataFrame:
+    #* Collect rows for the transformed dataframe
+    rows = []
+    for i in range(0, len(df) - window + 1, stride):
+        #* Concatenate the window of rows into a single flattened list
+        flattened_row = df.iloc[i:i + window].values.flatten().tolist()
+        rows.append(flattened_row)
+    
+    #* Generate new column names
+    columns = [
+        f"{col}_{j+1}" for j in range(window) for col in df.columns
+    ]
+    
+    #* Create the new dataframe
+    return pd.DataFrame(rows, columns=columns)
+
+def rename_pcap(columns):
+    columns = list(columns)
+    names = {}
+    for col in columns:
+        fields = col.split('.')
+        if len(fields) < 3:
+            names[col] = '_'.join(fields)
+        else:
+            names[col] = fields[-1]
+    return names
+
+def parse_tcp_flags(bitmask) -> str:
+    """
+    Convert a numeric TCP flags bitmask to a list of corresponding flag names.
+
+    :param bitmask: Numeric bitmask of TCP flags (integer).
+    :return: List of flag names joined by hyphens.
+    """
+    if isinstance(bitmask, str):
+        bitmask = int(bitmask, base=16)
+    #* Define TCP flags and their corresponding bit positions
+    flags = [
+        (0x01, "FIN"),  # 0b00000001
+        (0x02, "SYN"),  # 0b00000010
+        (0x04, "RST"),  # 0b00000100
+        (0x08, "PSH"),  # 0b00001000
+        (0x10, "ACK"),  # 0b00010000
+        (0x20, "URG"),  # 0b00100000
+        (0x40, "ECE"),  # 0b01000000
+        (0x80, "CWR"),  # 0b10000000
+    ]
+    
+    #* Extract flags from the bitmask
+    result = sorted([name for bit, name in flags if bitmask & bit])
+    return '-'.join(result)
 
 def is_purely_or(expr):
     from sympy.logic.boolalg import Or

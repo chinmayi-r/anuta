@@ -14,7 +14,7 @@ import json
 import warnings
 warnings.filterwarnings("ignore")
 
-from anuta.constructor import Constructor, Millisampler, Cidds001
+from anuta.constructor import Constructor, Millisampler, Cidds001, Netflix
 from anuta.theory import Theory
 from anuta.miner import miner_versionspace, miner_valiant, validator
 
@@ -50,18 +50,27 @@ if __name__ == '__main__':
         sys.exit(0)
         
     
-    filepath = f"data/cidds_wk2_attack.csv"
-    filepath = f"data/cidds_wk2_all.csv"
-    filepath = f"data/cidds_wk3_all.csv"
-    cidds = Cidds001(filepath)
-    limit = 0
+    # filepath = f"data/cidds_wk2_attack.csv"
+    # filepath = f"data/cidds_wk2_all.csv"
+    # filepath = f"data/cidds_wk3_all.csv"
+    # cidds = Cidds001(filepath)
+    # limit = 0
+    
+    filepath = f"data/netflix.csv"
+    netflix = Netflix(filepath)
+    
     if sys.argv[1] == 'all':
-        limit = cidds.df.shape[0]
+        # limit = cidds.df.shape[0]
+        limit = netflix.df.shape[0]
+        
         # main(cidds, sys.argv[1])
         # sys.exit(0)
     else:
         # cidds.df = cidds.df.sample(n=int(sys.argv[1]), random_state=42)
         limit = int(sys.argv[1])
-    refcidds = Cidds001("data/cidds_wk4_all.csv")
-    main(cidds, refcidds, limit)
+    # refcidds = Cidds001("data/cidds_wk4_all.csv")
+    # main(cidds, refcidds, limit)
+    
+    refnetflix = Netflix("data/netflix.csv")
+    main(netflix, refnetflix, limit)
     sys.exit(0)

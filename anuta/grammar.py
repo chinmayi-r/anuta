@@ -19,6 +19,8 @@ class Bounds:
 class ConstantType(Enum):
     ASSIGNMENT = auto()
     SCALAR = auto()
+    LIMIT = auto()
+    ADDITION = auto()
 
 @dataclass
 class Constants(object):
@@ -101,14 +103,41 @@ class Anuta(object):
         if type(clause) not in [sp.GreaterThan, sp.StrictGreaterThan]:
             #* Not a bound (not generalizable).
             return False, clause
-
         assert len(clause.args) == 2, f"Unexpected Ge clause: {clause}"
+        
         #* (S x) lhs ≥ (S x) lhs
         lhs, rhs = clause.args
         generalized = False
         new_clause = clause
         
-        if type(lhs) == sp.Mul:
+        if type(lhs) == sp.Integer or type(rhs) == sp.Integer:
+            #* A ≥ max_lb or min_ub ≥ A
+            is_lb = True
+            if type(lhs) == sp.Integer:
+                assert type(rhs) == sp.Symbol, f"Unexpected {rhs=} in {clause}"
+                #* 10 ≥ A
+                is_lb = False
+                limit, var = lhs, rhs
+            else:
+                assert type(lhs) == sp.Symbol, f"Unexpected {lhs=} in {clause}"
+                limit, var = rhs, lhs
+            #! Assume all scalars in front of a var are specified constants.
+            constants = self.constants.get(str(var))
+            assert constants, f"Missing constants for {var=}."
+            rank, maxrank = constants.values.index(limit), len(constants.values) - 1
+            if (is_lb and rank == 0) or (not is_lb and rank == maxrank):
+                log.info(f"Already at the most general limit: {clause=}")
+                return False, clause
+            else:
+                if is_lb:
+                    #* Try decreasing the lower bound to make it more general.
+                    new_clause = sp.StrictGreaterThan(lhs, constants.values[rank-1])
+                else:
+                    #* Try increasing the upper bound to make it more general.
+                    new_clause = sp.StrictGreaterThan(constants.values[rank+1], rhs)
+                generalized = True
+        
+        if not generalized and type(lhs) == sp.Mul:
             _, var = lhs.args
             rank, maxrank = self.rank_literal(lhs)
             constants = self.constants.get(str(var))
@@ -173,14 +202,41 @@ class Anuta(object):
         if type(clause) not in [sp.GreaterThan, sp.StrictGreaterThan]:
             #* Not a bound (not generalizable).
             return False, clause
-
         assert len(clause.args) == 2, f"Unexpected Ge clause: {clause}"
+        
         #* (S x) lhs ≥ (S x) lhs
         lhs, rhs = clause.args
         specialized = False
         new_clause = clause
         
-        if type(lhs) == sp.Mul:
+        if type(lhs) == sp.Integer or type(rhs) == sp.Integer:
+            #* A ≥ max_lb or min_ub ≥ A
+            is_lb = True
+            if type(lhs) == sp.Integer:
+                assert type(rhs) == sp.Symbol, f"Unexpected {rhs=} in {clause}"
+                #* 10 ≥ A
+                is_lb = False
+                limit, var = lhs, rhs
+            else:
+                assert type(lhs) == sp.Symbol, f"Unexpected {lhs=} in {clause}"
+                limit, var = rhs, lhs
+            #! Assume all scalars in front of a var are specified constants.
+            constants = self.constants.get(str(var))
+            assert constants, f"Missing constants for {var=}."
+            rank, maxrank = constants.values.index(limit), len(constants.values) - 1
+            if (is_lb and rank == maxrank) or (not is_lb and rank == 0):
+                log.info(f"Already at the most specific limit: {clause=}")
+                return False, clause
+            else:
+                if is_lb:
+                    #* Try increasing the lower bound to make it more general.
+                    new_clause = sp.StrictGreaterThan(lhs, constants.values[rank+1])
+                else:
+                    #* Try decreasing the upper bound to make it more general.
+                    new_clause = sp.StrictGreaterThan(constants.values[rank-1], rhs)
+                specialized = True
+        
+        if not specialized and type(lhs) == sp.Mul:
             _, var = lhs.args
             rank, _ = self.rank_literal(lhs)
             constants = self.constants.get(str(var))
@@ -341,13 +397,18 @@ class Anuta(object):
             self.search_arity = 3
             new_candidates: Set[Constraint] = set()
             
-            #* Combining two rejected arity-2 implications to form a more general arity-3 constraint.
+            #& Combining two rejected arity-2 implications to form a more general arity-3 constraint.
+            log.info(f"Combining rejected arity-2 implications ...")
             rejected_bounds: List[sp.Expr] = []
+            rejected_equalities: List[sp.Expr] = []
             for candidate1 in self.candidates:
                 if type(candidate1.expr) != sp.Implies:
-                    assert type(candidate1.expr) in [sp.GreaterThan, sp.StrictGreaterThan]
-                    rejected_bounds.append(candidate1.expr)
+                    if type(candidate1.expr) in [sp.GreaterThan, sp.StrictGreaterThan]:
+                        rejected_bounds.append(candidate1.expr)
+                    elif type(candidate1.expr) in [sp.Equality]:
+                        rejected_equalities.append(candidate1.expr)
                     continue
+                
                 premise1, conclusion1 = candidate1.expr.args
                 premise1, conclusion1 = Constraint(premise1), Constraint(conclusion1)
                 
@@ -381,7 +442,7 @@ class Anuta(object):
             log.info(f"Proposed {len(new_candidates)} arity-{self.search_arity} (in)equality implications.")
             cur_ncandidates = len(new_candidates)
             
-            #* Try generalizing the rejected bounds to implication forms.   
+            #& Try generalizing the rejected bounds to implication forms.   
             log.info(f"Proposing implications with bounds ...")
             #! Should not limit to only the rejected bounds:
             #!  Generalized (Bytes >= 64*Packets) to (Bytes >= 42*Packets), which is accepted, 
@@ -392,8 +453,6 @@ class Anuta(object):
             log.info(f"{rejected_bounds=}")
             arity2_bounds = [bound.expr for bound in self._arity2_cache if type(bound.expr) in [sp.GreaterThan, sp.StrictGreaterThan]]
             equality_literals = [literal.expr for literal in self._literal_cache if type(literal.expr) in [sp.Equality, sp.Unequality]]  
-            # print(f"{len(arity2_bounds)=}")
-            # print(f"{len(equality_literals)=}")
             for i, rejected_bound in enumerate(rejected_bounds):
                 for literal in equality_literals:
                     #* The rejected bounds are the most general after interative refinement.
@@ -422,6 +481,16 @@ class Anuta(object):
                     new_candidates.add(composite)
                 print(f"Proposed # of arity-{self.search_arity} implications w/ bounds:\t{len(new_candidates)}", end='\r')
             log.info(f"Proposed {len(new_candidates)-cur_ncandidates} arity-{self.search_arity} implications w/ bounds")
+            
+            #& Try generalizing the rejected equalities to implication forms.
+            log.info(f"Proposing implications with var-equalities ...")
+            for literal in equality_literals:
+                for rejected_eq in rejected_equalities:
+                    #* (A=a) => (B=C+10)
+                    composite = Constraint( literal >> rejected_eq )
+                    new_candidates.add(composite)
+                print(f"Proposed # of arity-{self.search_arity} implications w/ var-equalities:\t{len(new_candidates)}", end='\r')
+            log.info(f"Proposed {len(new_candidates)-cur_ncandidates} arity-{self.search_arity} implications w/ var-equalities")
             
         elif self.search_arity == 3:            
             #* Propose new candidates by generalizing inconsistant (rejected) ones.
@@ -452,13 +521,14 @@ class Anuta(object):
         new_candidates: Set[Constraint] = set()
         
         for lhs in literals:
-            #& Connectives: = and ≠
-            if type(lhs.expr) in [sp.Equality, sp.Unequality]:
+            #& Connectives: =, ≠, >, ≥ (A=10, A≠10, A>10, A≥10)
+            #& Resulting type: Implies
+            if type(lhs.expr) in [sp.Equality, sp.Unequality, sp.GreaterThan, sp.StrictGreaterThan]:
                 for conclusion in literals:
-                    if type(conclusion.expr) not in [sp.Equality, sp.Unequality]: continue
-                    #* X=>X is trivial.
+                    if type(conclusion.expr) not in [sp.Equality, sp.Unequality, sp.GreaterThan, sp.StrictGreaterThan]: continue
+                    #* A=>A is trivial.
                     if lhs == conclusion: continue
-                    #* (X=10) => (X=20) is trivial.
+                    #* (A ≠/≥ 10) => (A =/≥ 20) is trivial.
                     if lhs.expr.args[0] == conclusion.expr.args[0]: continue
                     
                     candidate = Constraint(sp.Implies(lhs.expr, conclusion.expr))
@@ -468,13 +538,14 @@ class Anuta(object):
                     assert type(candidate.expr) == sp.Implies and not candidate.expr in [true, false], (
                         f"{candidate} is not an implication or is trivial.")
                     new_candidates.add(candidate)
-            #& Connectives: ×, identity
+            #& Connectives: ×, identity (10A, A)
+            #& Resulting type: GreaterThan
             elif type(lhs.expr) in [sp.Mul, sp.Symbol]:
                 for rhs in literals:
                     if type(rhs.expr) not in [sp.Mul, sp.Symbol]: continue
                     if lhs == rhs: continue
                     if type(lhs.expr) != sp.Symbol and type(rhs.expr) != sp.Symbol:
-                        #* (10X) => (20X) is trivial.
+                        #* (10A) => (20A) is trivial.
                         if lhs.expr.args[1] == rhs.expr.args[1]: 
                             self.num_candidates_rejected += 1
                             self.num_candidates_proposed += 1
@@ -495,6 +566,18 @@ class Anuta(object):
                             self.num_candidates_proposed += 1
                         else:
                             new_candidates.add(candidate)
+
+            #& Connective: + (A+10)
+            #& Resulting type: Equality
+            elif type(lhs.expr) in [sp.Add]:
+                for var in self.variables.values():
+                    #* (A+10) => (A+20) is trivial.
+                    if lhs.expr.args[0] == var: continue
+                    
+                    #& Only consider Var1==(Var2+10) for now.
+                    candidate = Constraint(sp.Eq(lhs.expr, var))
+                    new_candidates.add(candidate)
+                    
             else:
                 raise NotImplementedError(f"Unsupported literal: {lhs}")
         
@@ -540,15 +623,34 @@ class Anuta(object):
                             self.prior.add(Constraint(sp.And(*ne_priors)))
                     case ConstantType.SCALAR:
                         assert self.domains[name].kind == DomainType.NUMERICAL, (
-                            f"Scalar constant {self.constants[name]} must be associated with a numerical var.")
+                            f"`SCALAR` constant {self.constants[name]} must be associated with a numerical var.")
                         
                         self.constants[name].values.sort() #* Just in case.
                         #& Version-spacing: Start with the most specific (i.e., extreme) constraints 
                         #* then generalize upon violation.
                         lb_constraint = Constraint(sp.Mul(var, sp.S(self.constants[name].values[0])))
-                        yield lb_constraint
                         ub_constraint = Constraint(sp.Mul(var, sp.S(self.constants[name].values[-1])))
+                        yield lb_constraint
                         yield ub_constraint
+                    case ConstantType.LIMIT:
+                        assert self.domains[name].kind == DomainType.NUMERICAL, (
+                            f"`LIMIT` constant {self.constants[name]} must be associated with a numerical var.")
+                        self.constants[name].values.sort() #* Just in case.
+                        #? Strict bounds or not?
+                        #* Most specific: min_ub > Var > max_lb
+                        lower_limit = Constraint(sp.S(self.constants[name].values[0]) > var)
+                        upper_limit = Constraint(var > sp.S(self.constants[name].values[-1]))
+                        yield lower_limit
+                        yield upper_limit
+                    case ConstantType.ADDITION:
+                        assert self.domains[name].kind == DomainType.NUMERICAL, (
+                            f"`ADDITION` constant {self.constants[name]} must be associated with a numerical var.")
+                        # self.constants[name].values.sort() #* Just in case.
+                        for const in self.constants[name].values:
+                            #^ We enumerate the addition constants,
+                            #! assuming they aren't used as bounds but only as equality (Var1 = Var2+ADDITION).
+                            constraint = Constraint(var + sp.S(const))
+                            yield constraint
                     case _:
                         raise NotImplementedError(f"Unsupported constant: {self.constants[name]}")
             else:

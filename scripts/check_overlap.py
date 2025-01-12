@@ -1,10 +1,17 @@
 import pandas as pd
 import sys
+import hashlib
 
+
+def hash_row(row):
+    """
+    Hash a row to a unique string using SHA256.
+    """
+    return hashlib.sha256(pd.util.hash_pandas_object(row).values.tobytes()).hexdigest()
 
 def calculate_overlap_ratio(df1, df2):
     """
-    Calculate the overlap ratio between two pandas DataFrames.
+    Calculate the overlap ratio between two pandas DataFrames, optimized for large datasets.
 
     Parameters:
         df1 (pd.DataFrame): The first DataFrame.
@@ -13,19 +20,19 @@ def calculate_overlap_ratio(df1, df2):
     Returns:
         float: The overlap ratio.
     """
-    #* Ensure the column order is consistent
-    df1 = df1.sort_index(axis=1)
-    df2 = df2.sort_index(axis=1)
+    # Hash rows to unique identifiers for each DataFrame
+    df1_hashed = df1.apply(hash_row, axis=1)
+    df2_hashed = df2.apply(hash_row, axis=1)
+
+    # Convert hashed rows to sets
+    set1 = set(df1_hashed)
+    set2 = set(df2_hashed)
+
+    # Calculate intersection size and overlap ratio
+    common_count = len(set1 & set2)
+    total_count = len(set1) + len(set2)
     
-    #* Identify the intersection of rows
-    common_rows = pd.merge(df1, df2, how='inner')
-    num_common = len(common_rows)
-
-    #* Calculate overlap ratio
-    total_rows = len(df1) + len(df2)
-    overlap_ratio = num_common / total_rows if total_rows > 0 else 0
-
-    return overlap_ratio
+    return common_count / total_count if total_count > 0 else 0
 
 if __name__ == "__main__":
     # #* Sample DataFrames
@@ -40,8 +47,8 @@ if __name__ == "__main__":
     df1 = pd.read_csv(path1)
     df2 = pd.read_csv(path2)
     
-    df1 = df1.drop(columns=['Date first seen', 'Dst IP Addr', 'Src IP Addr', 'Duration', 'Bytes', 'Packets'])
-    df2 = df2.drop(columns=['Date first seen', 'Dst IP Addr', 'Src IP Addr', 'Duration', 'Bytes', 'Packets'])
+    df1 = df1.drop(columns=['Date first seen', 'Dst IP Addr', 'Src IP Addr', 'Bytes', 'Packets'])#, 'Duration'])
+    df2 = df2.drop(columns=['Date first seen', 'Dst IP Addr', 'Src IP Addr', 'Bytes', 'Packets'])#, 'Duration', 'Bytes', 'Packets'])
     if 'Flows' in df1.columns:
         df1 = df1.drop(columns=['Flows'])
     if 'Flows' in df2.columns:

@@ -1,6 +1,45 @@
 from bidict import bidict
 
 
+#******************** Netflix data Domain Knowledge begins ********************
+netflix_flags = ['SYN', 'ACK-SYN', 'ACK', 'ACK-PSH', 'ACK-FIN']
+netflix_seqnum_increaments = [1]
+netflix_tcplen_limits = [0]
+
+def netflix_ip_map(ip: str):
+    if ip in ["192.168.43.72", "75.202.11.223"]:
+        #^ Client IPs
+        return 0
+    elif ip in ["198.38.120.153", "28.111.112.209"]:
+        #^ Server IPs
+        return 1
+    else:
+        raise ValueError(f"Unknown IP address for Netflix dataset: {ip}")
+
+def netflix_port_map(port: int):
+    if port in [49977, 22379]:
+        #^ Client ports
+        return 0
+    elif port in [443, 40059]:
+        #^ Server ports
+        return 1
+    else:
+        raise ValueError(f"Unknown port for Netflix dataset: {port}")
+
+def netflix_flags_map(flags: str):
+    if flags in netflix_flags:
+        return netflix_flags.index(flags)
+    else:
+        return -1
+
+def netflix_proto_map(proto: str):
+    if proto == 'TCP':
+        return 0
+    else:
+        return 1
+
+#******************** Netflix data Domain Knowledge ends ********************
+
 popular_ports = [
     # TCP Ports
     20, 21, 22, 23, 25, 53, 80, 110, 143, 443,
@@ -12,7 +51,7 @@ popular_ports = [
     0x11, 0x16, 0x17, 0x22
 ]
 
-#******************** CIDDS-001 Domain Knowledge ********************
+#******************** CIDDS-001 Domain Knowledge begins ********************
 #? Should port be a categorical variable? Sometimes we need range values (i.e., application and dynamic ports).
 cidds_categorical = ['Flags', 'Proto', 'SrcIpAddr', 'DstIpAddr'] + ['SrcPt', 'DstPt']
 cidds_numerical = ['Packets', 'Bytes', 'Flows', 'Duration']
@@ -37,10 +76,10 @@ cidds_constants = {
 	'packet': [42, 64, 65_535], #* MTU
 }
 
-def proto_map(proto: str):
+def cidds_proto_map(proto: str):
 	return cidds_proto_conversion[proto]
 
-def ip_map(ip: str):
+def cidds_ip_map(ip: str):
     new_ip = ''
     if ip.startswith('192.168.'):
         new_ip += 'private_'
@@ -60,7 +99,7 @@ def ip_map(ip: str):
     
     return cidds_ip_conversion[new_ip]
 
-def flag_map(flag: str):
+def cidds_flag_map(flag: str):
 	#! Don't consider the specific 'Flags' values for now
     new_flag = ''
     if flag == '......':
@@ -69,4 +108,4 @@ def flag_map(flag: str):
         new_flag = 'flags'
     
     return cidds_flags_conversion[new_flag]
-#******************** CIDDS-001 Domain Knowledge ********************
+#******************** CIDDS-001 Domain Knowledge ends ********************

@@ -9,7 +9,7 @@ import sys
 
 from anuta.grammar import AnutaMilli, Bounds, Anuta, Domain, DomainType, ConstantType, Constants
 from anuta.known import *
-from anuta.utils import log, save_constraints, to_big_camelcase
+from anuta.utils import *
 
 
 @dataclass
@@ -63,11 +63,115 @@ class Constructor(object):
             domains: dict[str, Domain],
         ) -> tuple[dict[str, dict[str, np.ndarray]], dict[str, DomainCounter]]:
         pass
+
+class Netflix(Constructor):
+    def __init__(self, filepath) -> None:
+        STRIDE = 2
+        WINDOW = 3
+        
+        log.info(f"Loading data from {filepath}")
+        self.df = pd.read_csv(filepath, parse_dates=['frame.time'])
+        #! Some packets are truncated, so the frame.len ≤ actual packet size (impact sequence numbers).
+        # self.df = self.df[self.df['_ws.col.info'].str.contains('Packet size limited during capture')==False]
+        self.df.drop(columns=['tcp.window_size_value', 'frame.len', '_ws.col.info'], inplace=True)
+        self.df['tcp.flags'] = self.df['tcp.flags'].apply(parse_tcp_flags)
+        self.df = self.df.sort_values(by=['frame.time', 'tcp.seq']).reset_index(drop=True)
+        self.df.rename(columns=rename_pcap(self.df.columns), inplace=True)
+        
+        #! Temporarily remove these columns.
+        self.df.drop(columns=['tcp_ack', 'tsval', 'tsecr'], inplace=True)
+        
+        self.df['ip_src'] = self.df['ip_src'].apply(netflix_ip_map)
+        self.df['ip_dst'] = self.df['ip_dst'].apply(netflix_ip_map)
+        self.df['protocol'] = self.df['protocol'].apply(netflix_proto_map)
+        self.df['tcp_flags'] = self.df['tcp_flags'].apply(netflix_flags_map)
+        self.df['tcp_srcport'] = self.df['tcp_srcport'].apply(netflix_port_map)
+        self.df['tcp_dstport'] = self.df['tcp_dstport'].apply(netflix_port_map)
+        
+        self.df = generate_sliding_windows(self.df.iloc[:, 2:], stride=STRIDE, window=WINDOW)
+        
+        col_to_var = {col: to_big_camelcase(col, sep='_') for col in self.df.columns}
+        self.df.rename(columns=col_to_var, inplace=True)
+        variables = list(self.df.columns)
+        self.categorical = []
+        for name in self.df.columns:
+            if not any(keyword in name.lower() for keyword in ('seq', 'ack', 'len', 'ts')):
+                self.categorical.append(name)
+        
+        domains = {}
+        for name in self.df.columns:
+            if name not in self.categorical:
+                domains[name] = Domain(DomainType.NUMERICAL, 
+                                       Bounds(self.df[name].min().item(), 
+                                              self.df[name].max().item()), 
+                                       None)
+            else:
+                domains[name] = Domain(DomainType.CATEGORICAL, 
+                                       None, 
+                                       self.df[name].unique())
+        
+        self.constants: dict[str, Constants] = {}
+        for name in self.df.columns:
+            if 'seq' in name.lower():
+                self.constants[name] = Constants(
+                    kind=ConstantType.ADDITION,
+                    values=netflix_seqnum_increaments
+                )
+            if 'len' in name.lower():
+                self.constants[name] = Constants(
+                    kind=ConstantType.LIMIT,
+                    values=netflix_tcplen_limits
+                )
+        self.anuta = Anuta(variables, domains, self.constants)
+        pprint(self.anuta.variables)
+        pprint(self.anuta.domains)
+        pprint(self.anuta.constants)
+        return
+    
+    def get_indexset_and_counter(
+            self, df: pd.DataFrame,
+            domains: dict[str, Domain],
+        ) -> tuple[dict[str, dict[str, np.ndarray]], dict[str, DomainCounter]]:
+        indexset = {}
+        #^ dict[var: dict[val: array(indices)]] // Var -> {Distinct value -> indices}
+        for cat in self.categorical:
+            # print(f"Processing {cat}")
+            indices = df.groupby(by=cat).indices
+            #! Here, do not filter the indices based on the constants.
+            # print(f"indices: {indices}")
+            # filtered_indices = {}
+            # if cat in self.constants:
+            #     for key in indices:
+            #         if key.item() in self.constants[cat].values:
+            #             filtered_indices[key] = indices[key]
+            # indexset[cat] = filtered_indices
+            indexset[cat] = indices
+        #TODO: Create index set also for numerical variables.
+        fcount = defaultdict(dict)
+        #^ dict[var: dict[val: count]] // Var -> {Value of interest -> (count,freq)}
+        for cat in indexset:
+            if cat in self.constants:
+                #* Don't enumerate the domain if it has associated constants.
+                values = self.constants[cat].values
+            else:
+                values = indexset[cat].keys()
+            
+            for key in values:
+                #! Some values could be in the constants but not in the data (partition).
+                if key in domains[cat].values and key in indexset[cat]:
+                    #* Initialize the counters to the frequency of the value in the data.
+                    #& Prioritize rare values (inductive bias).
+                    #& Using the frequency only as a tie-breaker [count, freq].
+                    freq = len(indexset[cat][key])
+                    dc = DomainCounter(count=0, frequency=freq)
+                    fcount[cat] |= {key: dc} if type(key) == int else {key.item(): dc}
+        return indexset, fcount
+        
         
 class Cidds001(Constructor):
     def __init__(self, filepath) -> None:
         log.info(f"Loading data from {filepath}")
-        self.df = pd.read_csv(filepath).iloc[:, :11]
+        self.df: pd.DataFrame = pd.read_csv(filepath).iloc[:, :11]
         #* Discard the timestamps for now, and Flows is always 1.
         self.df = self.df.drop(columns=['Date first seen', 'Flows'])
         col_to_var = {col: to_big_camelcase(col) for col in self.df.columns}
@@ -75,10 +179,10 @@ class Cidds001(Constructor):
         variables = list(self.df.columns)
         
         #* Convert the Flags and Proto columns to integers        
-        self.df['Flags'] = self.df['Flags'].apply(flag_map)
-        self.df['Proto'] = self.df['Proto'].apply(proto_map)
-        for var in ['SrcIpAddr', 'DstIpAddr']:
-            self.df[var] = self.df[var].apply(ip_map)
+        self.df['Flags'] = self.df['Flags'].apply(cidds_flag_map)
+        self.df['Proto'] = self.df['Proto'].apply(cidds_proto_map)
+        self['SrcIpAddr'] = self.df['SrcIpAddr'].apply(cidds_ip_map)
+        self['DstIpAddr'] = self.df['DstIpAddr'].apply(cidds_ip_map)
         self.categorical = cidds_categorical
         
         domains = {}

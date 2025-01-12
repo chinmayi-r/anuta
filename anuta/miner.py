@@ -204,6 +204,7 @@ def miner_versionspace(constructor: Constructor, refconstructor: Constructor, li
     indexsets, fcounts = zip(*[constructor.get_indexset_and_counter(df, anuta.domains) for df in dfpartitions])
     fullindexsets, fullfcounts = constructor.get_indexset_and_counter(constructor.df, anuta.domains)
     
+    assert fullindexsets; assert fullfcounts
     pprint(fcounts[0])
     
     while anuta.search_arity <= ARITY_LIMIT:
