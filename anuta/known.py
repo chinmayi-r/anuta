@@ -7,10 +7,10 @@ netflix_seqnum_increaments = [1]
 netflix_tcplen_limits = [0]
 
 def netflix_ip_map(ip: str):
-    if ip in ["192.168.43.72", "75.202.11.223"]:
+    if ip in ["192.168.43.72", "75.202.11.223", 3232246600]:
         #^ Client IPs
         return 0
-    elif ip in ["198.38.120.153", "28.111.112.209"]:
+    elif ip in ["198.38.120.153", "28.111.112.209", 3324410009]:
         #^ Server IPs
         return 1
     else:

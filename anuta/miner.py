@@ -37,8 +37,13 @@ def validate(
                 continue
             #* Evaluate the constraint with the given assignments
             sat = rule.subs(assignments)
-            if not sat:
-                violations[k] = 1
+            try:
+                if not sat:
+                    violations[k] = 1
+            except Exception as e:
+                log.error(f"Error evaluating {rule}:\n{e}")
+                pprint("Assignments:", assignments)
+                exit(1)
     log.info(f"Worker {worker_idx+1} finished.")
     return violations
 

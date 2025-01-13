@@ -42,7 +42,7 @@ if __name__ == '__main__':
         netflix = Netflix(validation_data)
         data_label = validation_data.split('/')[-1].split('.')[-2]
         if 'syn' in validation_data:
-            n = 10_000
+            n = None
         netflix.df = netflix.df.sample(n=n, random_state=42).reset_index(drop=True)\
             if n is not None else netflix.df
         

@@ -73,6 +73,7 @@ class Netflix(Constructor):
         self.df = pd.read_csv(filepath, parse_dates=['frame.time'])
         #! Some packets are truncated, so the frame.len ≤ actual packet size (impact sequence numbers).
         # self.df = self.df[self.df['_ws.col.info'].str.contains('Packet size limited during capture')==False]
+        self.df['_ws.col.info'], self.df['tcp.window_size_value'] = '', ''
         self.df.drop(columns=['tcp.window_size_value', 'frame.len', '_ws.col.info'], inplace=True)
         self.df['tcp.flags'] = self.df['tcp.flags'].apply(parse_tcp_flags)
         self.df = self.df.sort_values(by=['frame.time', 'tcp.seq']).reset_index(drop=True)
@@ -88,7 +89,11 @@ class Netflix(Constructor):
         self.df['tcp_srcport'] = self.df['tcp_srcport'].apply(netflix_port_map)
         self.df['tcp_dstport'] = self.df['tcp_dstport'].apply(netflix_port_map)
         
-        self.df = generate_sliding_windows(self.df.iloc[:, 2:], stride=STRIDE, window=WINDOW)
+        if 'frame_number' in self.df.columns:
+            self.df.drop(columns=['frame_number'], inplace=True)
+        if 'frame_time' in self.df.columns:
+            self.df.drop(columns=['frame_time'], inplace=True)
+        self.df = generate_sliding_windows(self.df, stride=STRIDE, window=WINDOW)
         
         col_to_var = {col: to_big_camelcase(col, sep='_') for col in self.df.columns}
         self.df.rename(columns=col_to_var, inplace=True)
@@ -108,7 +113,7 @@ class Netflix(Constructor):
             else:
                 domains[name] = Domain(DomainType.CATEGORICAL, 
                                        None, 
-                                       self.df[name].unique())
+                                       self.df[name].unique().tolist())
         
         self.constants: dict[str, Constants] = {}
         for name in self.df.columns:
@@ -186,34 +191,34 @@ class Cidds001(Constructor):
         self.categorical = cidds_categorical
         
         domains = {}
-        for var in self.df.columns:
-            if var not in self.categorical:
-                domains[var] = Domain(DomainType.NUMERICAL, 
-                                      Bounds(self.df[var].min().item(), 
-                                             self.df[var].max().item()), 
+        for name in self.df.columns:
+            if name not in self.categorical:
+                domains[name] = Domain(DomainType.NUMERICAL, 
+                                      Bounds(self.df[name].min().item(), 
+                                             self.df[name].max().item()), 
                                       None)
             else:
-                domains[var] = Domain(DomainType.CATEGORICAL, 
+                domains[name] = Domain(DomainType.CATEGORICAL, 
                                       None, 
-                                      self.df[var].unique())
+                                      self.df[name].unique().tolist())
         
         #* Add the constants associated with the vars.
         prior_kb = []
         self.constants: dict[str, Constants] = {}
-        for var in variables:
-            if 'ip' in var.lower():
+        for name in variables:
+            if 'ip' in name.lower():
                 #& Don't need to add the IP constants here, as the domain is small and can be enumerated.
-                self.constants[var] = Constants(
+                self.constants[name] = Constants(
                     kind=ConstantType.ASSIGNMENT,
                     values=cidds_constants['ip']
                 )
-            elif 'pt' in var.lower():
-                self.constants[var] = Constants(
+            elif 'pt' in name.lower():
+                self.constants[name] = Constants(
                     kind=ConstantType.ASSIGNMENT,
                     values=cidds_constants['port']
                 )
-            elif 'packet' in var.lower():
-                self.constants[var] = Constants(
+            elif 'packet' in name.lower():
+                self.constants[name] = Constants(
                     kind=ConstantType.SCALAR,
                     #* Sort the values in ascending order.
                     values=sorted(cidds_constants['packet'])
