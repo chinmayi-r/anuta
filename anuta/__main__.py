@@ -38,15 +38,16 @@ if __name__ == '__main__':
         
         validation_data = sys.argv[3]
         assert validation_data.endswith('.csv'), "Invalid validation data."
-        cidds = Cidds001(validation_data)
+        # cidds = Cidds001(validation_data)
+        netflix = Netflix(validation_data)
         data_label = validation_data.split('/')[-1].split('.')[-2]
         if 'syn' in validation_data:
             n = 10_000
-        cidds.df = cidds.df.sample(n=n, random_state=42).reset_index(drop=True)\
-            if n is not None else cidds.df
+        netflix.df = netflix.df.sample(n=n, random_state=42).reset_index(drop=True)\
+            if n is not None else netflix.df
         
         print(f"Validating {n} samples from {validation_data} using {rulepath}")
-        validator(cidds, rules, f"{data_label}-{rule_label}")
+        validator(netflix, rules, f"{data_label}-{rule_label}")
         sys.exit(0)
         
     
