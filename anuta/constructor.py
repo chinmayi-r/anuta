@@ -79,7 +79,7 @@ class Netflix(Constructor):
         self.df.rename(columns=rename_pcap(self.df.columns), inplace=True)
         
         #! Temporarily remove these columns.
-        self.df.drop(columns=['tcp_ack', 'tsval', 'tsecr'], inplace=True)
+        self.df.drop(columns=['tsval', 'tsecr'], inplace=True)
         
         self.df['ip_src'] = self.df['ip_src'].apply(netflix_ip_map)
         self.df['ip_dst'] = self.df['ip_dst'].apply(netflix_ip_map)

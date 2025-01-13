@@ -78,8 +78,8 @@ class Anuta(object):
             return -1, -1
         
         scalar, var = literal.args
-        assert type(var) == sp.Symbol, f"Unexpected {var=} in {literal}"
-        assert type(scalar) == sp.Integer, f"Unexpected {scalar=} in {literal}"
+        assert isinstance(var, sp.Symbol), f"Unexpected {var=} in {literal}"
+        assert isinstance(scalar, sp.Integer), f"Unexpected {scalar=} in {literal}"
         #TODO: Support floats.
         scalar = int(scalar)
         #! Assume all scalars in front of a var are specified constants.
@@ -100,7 +100,7 @@ class Anuta(object):
         :return: `Tuple[bool, sp.Expr]` True if the clause is generalizable, 
                 the generalized clause, otherwise False and the original clause.
         """
-        if type(clause) not in [sp.GreaterThan, sp.StrictGreaterThan]:
+        if type(clause) not in [sp.GreaterThan, sp.StrictGreaterThan, sp.StrictLessThan]:
             #* Not a bound (not generalizable).
             return False, clause
         assert len(clause.args) == 2, f"Unexpected Ge clause: {clause}"
@@ -110,18 +110,13 @@ class Anuta(object):
         generalized = False
         new_clause = clause
         
-        if type(lhs) == sp.Integer or type(rhs) == sp.Integer:
-            #* A ≥ max_lb or min_ub ≥ A
-            is_lb = True
-            if type(lhs) == sp.Integer:
-                assert type(rhs) == sp.Symbol, f"Unexpected {rhs=} in {clause}"
-                #* 10 ≥ A
-                is_lb = False
-                limit, var = lhs, rhs
-            else:
-                assert type(lhs) == sp.Symbol, f"Unexpected {lhs=} in {clause}"
-                limit, var = rhs, lhs
-            #! Assume all scalars in front of a var are specified constants.
+        #& Deal with limits: TcpLen > 0 (not A > 100xB)
+        if type(clause) in [sp.StrictGreaterThan, sp.StrictLessThan]:
+            assert isinstance(lhs, sp.Symbol), f"Unexpected {lhs=} in {clause}"
+            assert isinstance(rhs, sp.Integer), f"Unexpected {rhs=} in {clause}"
+            var, limit = lhs, rhs
+            #* A > max_lb or A < min_ub
+            is_lb = True if type(clause) == sp.StrictGreaterThan else False
             constants = self.constants.get(str(var))
             assert constants, f"Missing constants for {var=}."
             rank, maxrank = constants.values.index(limit), len(constants.values) - 1
@@ -134,9 +129,10 @@ class Anuta(object):
                     new_clause = sp.StrictGreaterThan(lhs, constants.values[rank-1])
                 else:
                     #* Try increasing the upper bound to make it more general.
-                    new_clause = sp.StrictGreaterThan(constants.values[rank+1], rhs)
+                    new_clause = sp.StrictLessThan(rhs, constants.values[rank+1])
                 generalized = True
         
+        #& Deal with bounds: 10*Packets ≥ Bytes
         if not generalized and type(lhs) == sp.Mul:
             _, var = lhs.args
             rank, maxrank = self.rank_literal(lhs)
@@ -199,7 +195,7 @@ class Anuta(object):
         :return: `Tuple[bool, sp.Expr]` True if the clause is specializable, 
                 the generalized clause, otherwise False and the original clause.
         """
-        if type(clause) not in [sp.GreaterThan, sp.StrictGreaterThan]:
+        if type(clause) not in [sp.GreaterThan, sp.StrictGreaterThan, sp.StrictLessThan]:
             #* Not a bound (not generalizable).
             return False, clause
         assert len(clause.args) == 2, f"Unexpected Ge clause: {clause}"
@@ -209,18 +205,13 @@ class Anuta(object):
         specialized = False
         new_clause = clause
         
-        if type(lhs) == sp.Integer or type(rhs) == sp.Integer:
-            #* A ≥ max_lb or min_ub ≥ A
-            is_lb = True
-            if type(lhs) == sp.Integer:
-                assert type(rhs) == sp.Symbol, f"Unexpected {rhs=} in {clause}"
-                #* 10 ≥ A
-                is_lb = False
-                limit, var = lhs, rhs
-            else:
-                assert type(lhs) == sp.Symbol, f"Unexpected {lhs=} in {clause}"
-                limit, var = rhs, lhs
-            #! Assume all scalars in front of a var are specified constants.
+        #& Deal with limits: TcpLen > 0 (not A > 100xB)
+        if type(clause) in [sp.StrictGreaterThan, sp.StrictLessThan]:
+            assert isinstance(lhs, sp.Symbol), f"Unexpected {lhs=} in {clause}"
+            assert isinstance(rhs, sp.Integer), f"Unexpected {rhs=} in {clause}"
+            var, limit = lhs, rhs
+            #* A > max_lb or A < min_ub
+            is_lb = True if type(clause) == sp.StrictGreaterThan else False
             constants = self.constants.get(str(var))
             assert constants, f"Missing constants for {var=}."
             rank, maxrank = constants.values.index(limit), len(constants.values) - 1
@@ -229,13 +220,14 @@ class Anuta(object):
                 return False, clause
             else:
                 if is_lb:
-                    #* Try increasing the lower bound to make it more general.
+                    #* Try increasing the lower bound to make it more specific.
                     new_clause = sp.StrictGreaterThan(lhs, constants.values[rank+1])
                 else:
-                    #* Try decreasing the upper bound to make it more general.
-                    new_clause = sp.StrictGreaterThan(constants.values[rank-1], rhs)
+                    #* Try decreasing the upper bound to make it more specific.
+                    new_clause = sp.StrictLessThan(rhs, constants.values[rank-1])
                 specialized = True
         
+        #& Deal with bounds: 10*Packets ≥ Bytes
         if not specialized and type(lhs) == sp.Mul:
             _, var = lhs.args
             rank, _ = self.rank_literal(lhs)
@@ -369,7 +361,6 @@ class Anuta(object):
         return refined_candidates
             
     def propose_new_candidates(self) -> None:
-        # pprint("\tEntered propose_new_candidates()")
         #* Set for dedupe.
         new_candidates: Set[Constraint] = set()
         
@@ -523,17 +514,46 @@ class Anuta(object):
         for lhs in literals:
             #& Connectives: =, ≠, >, ≥ (A=10, A≠10, A>10, A≥10)
             #& Resulting type: Implies
-            if type(lhs.expr) in [sp.Equality, sp.Unequality, sp.GreaterThan, sp.StrictGreaterThan]:
+            if type(lhs.expr) in [sp.Equality, sp.Unequality, sp.GreaterThan, 
+                                  sp.StrictGreaterThan, sp.StrictLessThan]:
                 for conclusion in literals:
-                    if type(conclusion.expr) not in [sp.Equality, sp.Unequality, sp.GreaterThan, sp.StrictGreaterThan]: continue
+                    if type(conclusion.expr) not in [sp.Equality, sp.Unequality, sp.GreaterThan, 
+                                                     sp.StrictGreaterThan, sp.StrictLessThan]: continue
                     #* A=>A is trivial.
                     if lhs == conclusion: continue
                     #* (A ≠/≥ 10) => (A =/≥ 20) is trivial.
                     if lhs.expr.args[0] == conclusion.expr.args[0]: continue
                     
+                    if type(lhs.expr) in [sp.StrictLessThan, sp.StrictGreaterThan]:
+                        #^ Check the generalization of the premise.
+                        var, limit = lhs.expr.args
+                        assert isinstance(limit, sp.Integer), f"Unexpected {limit=} in {lhs}"
+                        assert isinstance(var, sp.Symbol), f"Unexpected {var=} in {lhs}"
+                        constants = self.constants.get(str(var))
+                        assert constants, f"Missing constants for {var=}."
+                        rank, maxrank = constants.values.index(limit), len(constants.values) - 1
+                        #* Premise has to start with the most general limit.
+                        if (type(lhs.expr) == sp.StrictGreaterThan and rank == maxrank)\
+                            or (type(lhs.expr) == sp.StrictLessThan and rank == 0):
+                            self.num_candidates_rejected += 1
+                            self.num_candidates_proposed += 1
+                            continue
+                    if type(conclusion.expr) in [sp.StrictLessThan, sp.StrictGreaterThan]:
+                        #^ Check the generalization of the conclusion.
+                        var, limit = conclusion.expr.args
+                        assert isinstance(limit, sp.Integer), f"Unexpected {type(limit)=} in {conclusion}"
+                        assert isinstance(var, sp.Symbol), f"Unexpected {var=} in {conclusion}"
+                        constants = self.constants.get(str(var))
+                        assert constants, f"Missing constants for {var=}."
+                        rank, maxrank = constants.values.index(limit), len(constants.values) - 1
+                        #* Conclusion has to end with the most specific limit.
+                        if (type(conclusion.expr) == sp.StrictGreaterThan and rank == 0)\
+                            or (type(conclusion.expr) == sp.StrictLessThan and rank == maxrank):
+                            self.num_candidates_rejected += 1
+                            self.num_candidates_proposed += 1
+                            continue
+                        
                     candidate = Constraint(sp.Implies(lhs.expr, conclusion.expr))
-                    # if candidate == Constraint(sp.Implies(sp.Eq(self.variables['DstIpAddr'], 3), sp.Ne(self.variables['SrcPt'], 8080))):
-                    #     print(f"Generated {candidate=}")
                     #^ A => B
                     assert type(candidate.expr) == sp.Implies and not candidate.expr in [true, false], (
                         f"{candidate} is not an implication or is trivial.")
@@ -571,7 +591,7 @@ class Anuta(object):
             #& Resulting type: Equality
             elif type(lhs.expr) in [sp.Add]:
                 for var in self.variables.values():
-                    #* (A+10) => (A+20) is trivial.
+                    #* (A+10) = A is trivial.
                     if lhs.expr.args[0] == var: continue
                     
                     #& Only consider Var1==(Var2+10) for now.
@@ -638,8 +658,14 @@ class Anuta(object):
                         self.constants[name].values.sort() #* Just in case.
                         #? Strict bounds or not?
                         #* Most specific: min_ub > Var > max_lb
-                        lower_limit = Constraint(sp.S(self.constants[name].values[0]) > var)
-                        upper_limit = Constraint(var > sp.S(self.constants[name].values[-1]))
+                        lower_limit = Constraint(
+                            #* Use the explicit function (instead of <) to fix the position of the limit to the right.
+                            #* Var < min_ub, Var > max_lb
+                            sp.StrictLessThan(var, sp.S(self.constants[name].values[0]))
+                        )
+                        upper_limit = Constraint(
+                            sp.StrictGreaterThan(var, sp.S(self.constants[name].values[-1]))
+                        )
                         yield lower_limit
                         yield upper_limit
                     case ConstantType.ADDITION:

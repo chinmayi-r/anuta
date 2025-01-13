@@ -274,6 +274,7 @@ def miner_versionspace(constructor: Constructor, refconstructor: Constructor, li
     print(f"Total learned: {len(anuta.kb)} ({len(anuta.kb)/anuta.num_candidates_proposed:.2%})")
     
     anuta.kb = validate_candidates(refconstructor)
+    print(f"Total proposed: {anuta.num_candidates_proposed}")
     print(f"Final learned: {len(anuta.kb)} ({len(anuta.kb)/anuta.num_candidates_proposed:.2%})")
     
     #* Prior: [(X!=2 & X!=3 & ...), (Y=500 | Y=400 | ...)]
