@@ -16,3 +16,4 @@ tqdm
 typing_extensions
 tzdata
 bidict
+ml_collections

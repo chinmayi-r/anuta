@@ -12,6 +12,9 @@ from anuta.known import *
 from anuta.utils import *
 
 
+#* Load configurations.
+cfg = FLAGS.config
+
 @dataclass
 class DomainCounter:
     count: int
@@ -186,8 +189,8 @@ class Cidds001(Constructor):
         #* Convert the Flags and Proto columns to integers        
         self.df['Flags'] = self.df['Flags'].apply(cidds_flag_map)
         self.df['Proto'] = self.df['Proto'].apply(cidds_proto_map)
-        self['SrcIpAddr'] = self.df['SrcIpAddr'].apply(cidds_ip_map)
-        self['DstIpAddr'] = self.df['DstIpAddr'].apply(cidds_ip_map)
+        self.df['SrcIpAddr'] = self.df['SrcIpAddr'].apply(cidds_ip_map)
+        self.df['DstIpAddr'] = self.df['DstIpAddr'].apply(cidds_ip_map)
         self.categorical = cidds_categorical
         
         domains = {}
@@ -200,7 +203,7 @@ class Cidds001(Constructor):
             else:
                 domains[name] = Domain(DomainType.CATEGORICAL, 
                                       None, 
-                                      self.df[name].unique().tolist())
+                                      self.df[name].unique())
         
         #* Add the constants associated with the vars.
         prior_kb = []

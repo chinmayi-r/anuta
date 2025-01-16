@@ -15,10 +15,12 @@ warnings.filterwarnings("ignore")
 from anuta.grammar import AnutaMilli, Anuta, DomainType
 from anuta.constructor import Constructor, DomainCounter
 from anuta.theory import Theory, Constraint
-from anuta.utils import log, clausify, save_constraints
+from anuta.utils import log, clausify, save_constraints, FLAGS
 
 
 anuta : Anuta = None
+#* Load configurations.
+cfg = FLAGS.config
 
 def validate(
     worker_idx: int, 
@@ -63,7 +65,6 @@ def validator(
         #* Avoid parallel overhead if the number of rules is small.
         nworkers = 1
     
-    # nworkers = 1
     log.info(f"Spawning {nworkers} workers for validation ...")
     if nworkers > 1:
         #* Prepare arguments for parallel processing
@@ -150,27 +151,31 @@ def test_candidates(
     exhausted_values[f"Worker {worker_idx}"] = 'Exhausted Domain Values'
     
     for i in tqdm(range(limit), total=limit):
-        '''Domain Counting'''
-        #* Get the vars at every iteration to account for the changes in the indexset.
-        indexed_vars = list(fcount.keys())
-        #* Cycle through the vars, treating them equally (no bias).
-        nxt_var = indexed_vars[i % len(indexed_vars)]
-        #* Find the least frequent value of the next variable.
-        least_freq_val = min(fcount[nxt_var], key=fcount[nxt_var].get)
-        #& Get the 1st from the indices of least frequent value (inductive bias).
-        #TODO: Choose randomly from the indices?
-        indices = indexset[nxt_var][least_freq_val]
-        #^ Somehow ndarray passes by value (unlike list) ...
-        index, indexset[nxt_var][least_freq_val] = indices[0], indices[1: ]
-        if indexset[nxt_var][least_freq_val].size == 0:
-            #* Remove the corresponding counter if the value is exhausted 
-            #* to prevent further sampling (from empty sets).
-            del fcount[nxt_var][least_freq_val]
-            exhausted_values[nxt_var].append(least_freq_val)
-            if not fcount[nxt_var]:
-                del fcount[nxt_var]
+        if cfg.DOMAIN_COUNTING:  
+            '''Domain Counting'''
+            #* Get the vars at every iteration to account for the changes in the indexset.
+            indexed_vars = list(fcount.keys())
+            #* Cycle through the vars, treating them equally (no bias).
+            nxt_var = indexed_vars[i % len(indexed_vars)]
+            #* Find the least frequent value of the next variable.
+            least_freq_val = min(fcount[nxt_var], key=fcount[nxt_var].get)
+            #& Get the 1st from the indices of least frequent value (inductive bias).
+            #TODO: Choose randomly from the indices?
+            indices = indexset[nxt_var][least_freq_val]
+            #^ Somehow ndarray passes by value (unlike list) ...
+            index, indexset[nxt_var][least_freq_val] = indices[0], indices[1: ]
+            if indexset[nxt_var][least_freq_val].size == 0:
+                #* Remove the corresponding counter if the value is exhausted 
+                #* to prevent further sampling (from empty sets).
+                del fcount[nxt_var][least_freq_val]
+                exhausted_values[nxt_var].append(least_freq_val)
+                if not fcount[nxt_var]:
+                    del fcount[nxt_var]
+            sample: pd.Series = dfpartition.iloc[index]
+        else:
+            '''Random Sampling''' 
+            sample: pd.Series = dfpartition.sample(random_state=8080).iloc[0]
         
-        sample: pd.Series = dfpartition.iloc[index]
         assignments = {}
         for name, val in sample.items():
             var = anuta.variables.get(name)
@@ -186,7 +191,9 @@ def test_candidates(
                 #* This constraint has already been violated.
                 continue
             #* Evaluate the constraint with the given assignments
-            sat = constraint.expr.subs(assignments)
+            if isinstance(constraint, Constraint):
+                constraint = constraint.expr
+            sat = constraint.subs(assignments)
             if not sat:
                 # log.info(f"Violated: {constraint}")
                 violations[k] = 1
@@ -200,7 +207,7 @@ def miner_versionspace(constructor: Constructor, refconstructor: Constructor, li
     #* Use a global var to prevent passing the object to each worker.
     anuta = constructor.anuta
     label = str(limit)
-    ARITY_LIMIT = 3
+    cfg.ARITY_LIMIT = 3
     start = perf_counter()
     
     #* Prepare arguments for parallel processing
@@ -212,7 +219,7 @@ def miner_versionspace(constructor: Constructor, refconstructor: Constructor, li
     assert fullindexsets; assert fullfcounts
     pprint(fcounts[0])
     
-    while anuta.search_arity <= ARITY_LIMIT:
+    while anuta.search_arity <= cfg.ARITY_LIMIT:
         anuta.propose_new_candidates()
         
         log.info(f"Started testing arity-{anuta.search_arity} constraints.")
@@ -277,13 +284,14 @@ def miner_versionspace(constructor: Constructor, refconstructor: Constructor, li
     print(f"Total rejected: {anuta.num_candidates_rejected} ({anuta.num_candidates_rejected/anuta.num_candidates_proposed:.2%})")
     print(f"Total prior: {len(anuta.prior)}")
     print(f"Total learned: {len(anuta.kb)} ({len(anuta.kb)/anuta.num_candidates_proposed:.2%})")
+    Theory.save_constraints(anuta.kb | anuta.prior, f'learned_{label}.rule')
     
     anuta.kb = validate_candidates(refconstructor)
     print(f"Total proposed: {anuta.num_candidates_proposed}")
     print(f"Final learned: {len(anuta.kb)} ({len(anuta.kb)/anuta.num_candidates_proposed:.2%})")
     
     #* Prior: [(X!=2 & X!=3 & ...), (Y=500 | Y=400 | ...)]
-    Theory.save_constraints(anuta.kb | anuta.prior, f'learned_{label}_a{ARITY_LIMIT}.rule')
+    Theory.save_constraints(anuta.kb | anuta.prior, f'learned_{label}_checked.rule')
     print(f"Runtime: {end-start:.2f}s\n\n")
     
     # if len(anuta.kb) <= 200: 
@@ -301,7 +309,7 @@ def miner_versionspace(constructor: Constructor, refconstructor: Constructor, li
     #     print(f"{len(anuta.kb)=}, {len(reduced_kb)=} ({pruned_count=})\n")
     #     print(f"Pruning time: {end-start:.2f}s\n\n")
         
-    #     Theory.save_constraints(anuta.kb, f'pruned_{label}_a{ARITY_LIMIT}.rule')
+    #     Theory.save_constraints(anuta.kb, f'pruned_{label}_a{cfg.ARITY_LIMIT}.rule')
 
 def miner_valiant(constructor: Constructor, limit: int = 0):
     global anuta
@@ -313,10 +321,11 @@ def miner_valiant(constructor: Constructor, limit: int = 0):
     start = perf_counter()
     #* Prepare arguments for parallel processing
     core_count = psutil.cpu_count()
+    # core_count = 1
     log.info(f"Spawning {core_count} workers ...")
     # mutex = Manager().Lock()
     dfpartitions = [df.reset_index(drop=True) for df in np.array_split(constructor.df, core_count)]
-    indexsets, fcounts = zip(*[constructor.get_indexset_and_counter(df) for df in dfpartitions])
+    indexsets, fcounts = zip(*[constructor.get_indexset_and_counter(df, anuta.domains) for df in dfpartitions])
     args = [(i, df, indexset, fcount, limit//core_count) 
             for i, (df, indexset, fcount) in enumerate(zip(dfpartitions, indexsets, fcounts))]
     pprint(fcounts[0])

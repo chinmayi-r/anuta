@@ -525,7 +525,7 @@ class Anuta(object):
                     if lhs.expr.args[0] == conclusion.expr.args[0]: continue
                     
                     if type(lhs.expr) in [sp.StrictLessThan, sp.StrictGreaterThan]:
-                        #^ Check the generalization of the premise.
+                        #^ Check the specificity of the premise.
                         var, limit = lhs.expr.args
                         assert isinstance(limit, sp.Integer), f"Unexpected {limit=} in {lhs}"
                         assert isinstance(var, sp.Symbol), f"Unexpected {var=} in {lhs}"
@@ -539,7 +539,7 @@ class Anuta(object):
                             self.num_candidates_proposed += 1
                             continue
                     if type(conclusion.expr) in [sp.StrictLessThan, sp.StrictGreaterThan]:
-                        #^ Check the generalization of the conclusion.
+                        #^ Check the specificity of the conclusion.
                         var, limit = conclusion.expr.args
                         assert isinstance(limit, sp.Integer), f"Unexpected {type(limit)=} in {conclusion}"
                         assert isinstance(var, sp.Symbol), f"Unexpected {var=} in {conclusion}"
@@ -727,6 +727,16 @@ class Anuta(object):
                         for const in self.constants[name].values:
                             #* Var x const
                             yield sp.Mul(var, sp.S(const))
+                    case ConstantType.LIMIT:
+                        for const in self.constants[name].values:
+                            #* Var < const
+                            yield sp.StrictLessThan(var, sp.S(const))
+                            #* Var > const
+                            yield sp.StrictGreaterThan(var, sp.S(const))
+                    case ConstantType.ADDITION:
+                        for const in self.constants[name].values:
+                            #* Var + const
+                            yield var + sp.S(const)
                     case _:
                         raise NotImplementedError(f"Unsupported constant: {self.constants[name]}")
             else:
@@ -748,10 +758,12 @@ class Anuta(object):
         #* Arity-2 constraints:
         expressions = list(self.generate_expressions())
         for i, expr_lhs in enumerate(expressions):
-            if type(expr_lhs) in [sp.Equality, sp.Unequality]:
+            if type(expr_lhs) in [sp.Equality, sp.Unequality, sp.GreaterThan, 
+                                  sp.StrictGreaterThan, sp.StrictLessThan]:
                 #* Filter self-comparison and ordering.
                 for expr_rhs in expressions[i+1:]:
-                    if type(expr_rhs) in [sp.Equality, sp.Unequality]:
+                    if type(expr_rhs) in [sp.Equality, sp.Unequality, sp.GreaterThan, 
+                                          sp.StrictGreaterThan, sp.StrictLessThan]:
                         
                         #& Avoid (Var==const1) AND (Var==const2)
                         if expr_lhs.args[0] != expr_rhs.args[0]:
@@ -769,6 +781,10 @@ class Anuta(object):
                         #* (Var==const1) OR ~(Var==const2)
                         #* ~(Var==const1) OR ~(Var==const2)
                         yield sp.Or(expr_lhs, expr_rhs)
+                        if type(expr_rhs) in [sp.StrictGreaterThan, sp.StrictLessThan]:
+                            #NOTE: A bit ugly but arity-1 limits should also be issued (unlike arity-1 eq/neq).
+                            yield expr_rhs
+                            yield expr_lhs
                 
             elif type(expr_lhs) == sp.Mul:
                 for name, var in self.variables.items():
@@ -777,6 +793,12 @@ class Anuta(object):
                         yield expr_lhs >= var
                         #* (Var x const1) <= Var
                         yield expr_lhs <= var
+            elif type(expr_lhs) == sp.Add:
+                for name, var in self.variables.items():
+                    #* (Var + const1) == Var
+                    yield sp.Eq(expr_lhs, var)
+                    #* (Var + const1) != Var
+                    yield sp.Ne(expr_lhs, var)
     
     def interval_filter(self, clause: sp.Expr) -> bool:
         """Filter constraints using interval arithmetic.
@@ -784,6 +806,7 @@ class Anuta(object):
         :param clause: Constraint to filter.
         :return: False if the constraint is valid, True if the constraint is invalid.
         """
+        #TODO: Also consider strict limits of type sp.StrictGreaterThan and sp.StrictLessThan.
         if type(clause) not in [sp.GreaterThan, sp.StrictGreaterThan]:
             #* Not a bound.
             return False
@@ -818,7 +841,7 @@ class Anuta(object):
     def generate_arity3_constraints(self, arity2_constraints) -> Generator[sp.Expr, None, None]:
         for expression in self.generate_expressions():
             #* Multiplication expressions can't be premises.
-            if type(expression) == sp.Mul: continue
+            if type(expression) in [sp.Mul, sp.Add]: continue
             
             for constraint in arity2_constraints:
                 #* Dedupe.
@@ -834,26 +857,27 @@ class Anuta(object):
         #^ No ≤ or ≥ constraints for now.
     
     def populate_kb(self) -> None:
-        added = set()
+        # added = set()
         num_duplicates = 0
         num_constraints = 0
         num_trivial = 0
         interval_filtered = 0
         arity2_constraints = []
         for constraint in self.generate_arity2_constraints():
-            if isinstance(constraint, sp.logic.boolalg.BooleanTrue):
+            if isinstance(constraint, sp.logic.boolalg.BooleanTrue) \
+                or isinstance(constraint, sp.logic.boolalg.BooleanFalse):
                 num_trivial += 1
             else:
-                if self.interval_filter(constraint):
-                    log.info(f"Interval-filtered: {constraint}")
-                    interval_filtered += 1
-                    continue
+                # if self.interval_filter(constraint):
+                #     log.info(f"Interval-filtered: {constraint}")
+                #     interval_filtered += 1
+                #     continue
                 
                 #* Dedupe: sp.Or(sp.Eq(x, 10), sp.Eq(y, 303)) == sp.Or(sp.Eq(y, 303), sp.Eq(x, 10))
-                if constraint in added:
-                    num_duplicates += 1
-                    continue
-                added.add(constraint)
+                # if constraint in added:
+                #     num_duplicates += 1
+                #     continue
+                # added.add(constraint)
                 arity2_constraints.append(constraint)
                 #^ Collect arity-2 constraints for creating arity-3 constraints.
                 #& Avoid arity-2 AND constraints for now.
@@ -871,11 +895,11 @@ class Anuta(object):
         old_num_constraints = num_constraints
         old_num_duplicates = num_duplicates
         for constraint in self.generate_arity3_constraints(arity2_constraints):
-            if constraint in added:
-                #* Dedupe for cases like (A | B | C == C | B | A)
-                num_duplicates += 1
-                continue
-            added.add(constraint)
+            # if constraint in added:
+            #     #* Dedupe for cases like (A | B | C == C | B | A)
+            #     num_duplicates += 1
+            #     continue
+            # added.add(constraint)
             self.candidates.append(constraint)
             num_constraints += 1
             if num_constraints % 10_000 == 0:

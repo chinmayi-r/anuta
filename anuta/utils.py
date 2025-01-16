@@ -1,9 +1,42 @@
 import logging
-import json
+import sys
 from typing import *
 import sympy as sp
 import pandas as pd
+from absl import flags
+from ml_collections import config_flags
 
+
+########### Command line options ###########
+'''Example usage:
+#* Inspect dataset
+python anuta -dataset=cidds -data=data/CIDDS/cidds_wk3_4k.csv
+#* Learn constraints
+python anuta -learn -dataset=cidds -data=data/CIDDS/cidds_wk3_4k.csv (-ref=data/cidds_wk4_all.csv)
+#* Validate dataset
+python anuta -validate -dataset=netflix -data=data/syn/netflix_rtf_syn.csv -limit=1k -rules=results/cidds/confidence/learned_10000_a3.rule
+'''
+FLAGS = flags.FLAGS
+
+#* Commands
+flags.DEFINE_boolean("learn", False, "Learn constraints from a dataset")
+flags.DEFINE_boolean("validate", False, "Validate a dataset using a learned theory")
+
+#* Configs
+flags.DEFINE_string("limit", "", "Limit on the number of samples to learn from")
+#TODO: Generalize `dataset` to netflow and pcap.
+flags.DEFINE_enum("dataset", None, ['cidds', 'netflix'], "Name of the dataset to learn from")
+flags.mark_flag_as_required('dataset')
+flags.DEFINE_string("data", None, "Path to the dataset to learn from or validate")
+flags.mark_flag_as_required('data')
+flags.DEFINE_string("ref", "", "Path to the reference dataset")
+flags.DEFINE_string("rules", "", "Path to the learned rules")
+flags.DEFINE_boolean("baseline", False, "Use the baseline method Valiant algorithm")
+# flags.DEFINE_integer("size", -1, "")
+
+config_flags.DEFINE_config_file("config", default="./configs/default.py")
+FLAGS(sys.argv)
+########### End of Command line options ###########
 
 true = sp.logic.true
 false = sp.logic.false
