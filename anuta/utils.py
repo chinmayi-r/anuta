@@ -12,7 +12,8 @@ from ml_collections import config_flags
 #* Inspect dataset
 python anuta -dataset=cidds -data=data/CIDDS/cidds_wk3_4k.csv
 #* Learn constraints
-python anuta -learn -dataset=cidds -data=data/CIDDS/cidds_wk3_4k.csv (-ref=data/cidds_wk4_all.csv)
+python anuta -learn -dataset=cidds -data=data/cidds_wk3_all.csv -baseline -limit=512
+python anuta -learn -dataset=cidds -data=data/cidds_wk3_all.csv -baseline -limit=8k (-ref=data/cidds_wk4_all.csv)
 #* Validate dataset
 python anuta -validate -dataset=netflix -data=data/syn/netflix_rtf_syn.csv -limit=1k -rules=results/cidds/confidence/learned_10000_a3.rule
 '''
@@ -32,6 +33,8 @@ flags.mark_flag_as_required('data')
 flags.DEFINE_string("ref", "", "Path to the reference dataset")
 flags.DEFINE_string("rules", "", "Path to the learned rules")
 flags.DEFINE_boolean("baseline", False, "Use the baseline method Valiant algorithm")
+#* Use `-nodc` to disable domain counting
+flags.DEFINE_boolean("dc", True, "Enable domain counting")
 # flags.DEFINE_integer("size", -1, "")
 
 config_flags.DEFINE_config_file("config", default="./configs/default.py")

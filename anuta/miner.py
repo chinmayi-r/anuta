@@ -174,7 +174,7 @@ def test_candidates(
             sample: pd.Series = dfpartition.iloc[index]
         else:
             '''Random Sampling''' 
-            sample: pd.Series = dfpartition.sample(random_state=8080).iloc[0]
+            sample: pd.Series = dfpartition.sample(random_state=i).iloc[0]
         
         assignments = {}
         for name, val in sample.items():

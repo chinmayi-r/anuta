@@ -45,7 +45,7 @@ if __name__ == '__main__':
         limit = constructor.df.size
     
     #* Disable domain counting for baseline method.
-    if FLAGS.baseline:
+    if FLAGS.baseline or not FLAGS.dc:
         FLAGS.config.DOMAIN_COUNTING = False
         
     if FLAGS.learn:
@@ -62,6 +62,7 @@ if __name__ == '__main__':
             refconstructor = Cidds001(refdata) if dataset == 'cidds' else Netflix(refdata)
             
         log.info(f"Learning from {limit} examples in {FLAGS.data}")
+        log.info(f"Domain counting enabled: {FLAGS.dc}")
         log.info(f"Using baseline method: {FLAGS.baseline}")
         log.info(f"Reference data: {refdata}")     
         
