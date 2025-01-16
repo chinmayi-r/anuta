@@ -151,26 +151,32 @@ def test_candidates(
     exhausted_values[f"Worker {worker_idx}"] = 'Exhausted Domain Values'
     
     for i in tqdm(range(limit), total=limit):
-        if cfg.DOMAIN_COUNTING:  
+        if cfg.DOMAIN_COUNTING:
             '''Domain Counting'''
-            #* Get the vars at every iteration to account for the changes in the indexset.
-            indexed_vars = list(fcount.keys())
-            #* Cycle through the vars, treating them equally (no bias).
-            nxt_var = indexed_vars[i % len(indexed_vars)]
-            #* Find the least frequent value of the next variable.
-            least_freq_val = min(fcount[nxt_var], key=fcount[nxt_var].get)
-            #& Get the 1st from the indices of least frequent value (inductive bias).
-            #TODO: Choose randomly from the indices?
-            indices = indexset[nxt_var][least_freq_val]
-            #^ Somehow ndarray passes by value (unlike list) ...
-            index, indexset[nxt_var][least_freq_val] = indices[0], indices[1: ]
-            if indexset[nxt_var][least_freq_val].size == 0:
-                #* Remove the corresponding counter if the value is exhausted 
-                #* to prevent further sampling (from empty sets).
-                del fcount[nxt_var][least_freq_val]
-                exhausted_values[nxt_var].append(least_freq_val)
-                if not fcount[nxt_var]:
-                    del fcount[nxt_var]
+            visited = set()
+            index = None
+            while True:
+                #* Get the vars at every iteration to account for the changes in the indexset.
+                indexed_vars = list(fcount.keys())
+                #* Cycle through the vars, treating them equally (no bias).
+                nxt_var = indexed_vars[i % len(indexed_vars)]
+                #* Find the least frequent value of the next variable.
+                least_freq_val = min(fcount[nxt_var], key=fcount[nxt_var].get)
+                #& Get the 1st from the indices of least frequent value (inductive bias).
+                #TODO: Choose randomly from the indices?
+                indices = indexset[nxt_var][least_freq_val]
+                #^ Somehow ndarray passes by value (unlike list) ...
+                index, indexset[nxt_var][least_freq_val] = indices[0], indices[1: ]
+                if indexset[nxt_var][least_freq_val].size == 0:
+                    #* Remove the corresponding counter if the value is exhausted 
+                    #* to prevent further sampling (from empty sets).
+                    del fcount[nxt_var][least_freq_val]
+                    exhausted_values[nxt_var].append(least_freq_val)
+                    if not fcount[nxt_var]:
+                        del fcount[nxt_var]
+                if index not in visited:
+                    visited.add(index)
+                    break
             sample: pd.Series = dfpartition.iloc[index]
         else:
             '''Random Sampling''' 
