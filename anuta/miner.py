@@ -289,11 +289,12 @@ def miner_versionspace(constructor: Constructor, refconstructor: Constructor, li
     print(f"Total proposed: {anuta.num_candidates_proposed}")
     print(f"Total rejected: {anuta.num_candidates_rejected} ({anuta.num_candidates_rejected/anuta.num_candidates_proposed:.2%})")
     print(f"Total prior: {len(anuta.prior)}")
-    print(f"Total learned: {len(anuta.kb)} ({len(anuta.kb)/anuta.num_candidates_proposed:.2%})")
+    initial_learned = len(anuta.kb)
     Theory.save_constraints(anuta.kb | anuta.prior, f'learned_{label}.rule')
     
     anuta.kb = validate_candidates(refconstructor)
     print(f"Total proposed: {anuta.num_candidates_proposed}")
+    print(f"Initial learned: {initial_learned} ({initial_learned/anuta.num_candidates_proposed:.2%})")
     print(f"Final learned: {len(anuta.kb)} ({len(anuta.kb)/anuta.num_candidates_proposed:.2%})")
     
     #* Prior: [(X!=2 & X!=3 & ...), (Y=500 | Y=400 | ...)]
