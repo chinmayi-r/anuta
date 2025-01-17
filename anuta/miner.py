@@ -355,7 +355,7 @@ def miner_valiant(constructor: Constructor, limit: int = 0):
     #* Update learned_kb based on the violated constraints
     for index, is_violated in tqdm(enumerate(aggregated_violations), total=len(aggregated_violations)):
         if not is_violated:
-            learned_kb.append(anuta.initial_kb[index])
+            learned_kb.append(anuta.candidates[index])
     
     end = perf_counter()
     # log.info(f"Aggregating bounds ...")
@@ -367,10 +367,10 @@ def miner_valiant(constructor: Constructor, limit: int = 0):
     #         if v.ub > aggregated_bounds[k].ub:
     #             aggregated_bounds[k].ub = v.ub
 
-    removed_count = len(anuta.initial_kb) - len(learned_kb)
+    removed_count = len(anuta.candidates) - len(learned_kb)
     # pprint(aggregated_bounds)
-    print(f"{len(learned_kb)=}, {len(anuta.initial_kb)=} ({removed_count=})")
-    Theory.save_constraints(learned_kb + anuta.prior_kb, f'learned_{label}.rule')
+    print(f"{len(learned_kb)=}, {len(anuta.candidates)=} ({removed_count=})")
+    Theory.save_constraints(learned_kb, f'learned_{label}.rule')
     print(f"Learning time: {end-start:.2f}s\n\n")
     
     if len(learned_kb) <= 200: 
