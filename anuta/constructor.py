@@ -10,6 +10,7 @@ import sys
 from anuta.grammar import AnutaMilli, Bounds, Anuta, Domain, DomainType, ConstantType, Constants
 from anuta.known import *
 from anuta.utils import *
+from anuta.options import FLAGS
 
 
 #* Load configurations.
@@ -58,6 +59,7 @@ class DomainCounter:
 
 class Constructor(object):
     def __init__(self) -> None:
+        self.label: str = None
         self.df: pd.DataFrame = None
         self.anuta: AnutaMilli | Anuta = None
     
@@ -69,6 +71,7 @@ class Constructor(object):
 
 class Netflix(Constructor):
     def __init__(self, filepath) -> None:
+        self.label = 'netflix'
         STRIDE = 2
         WINDOW = 3
         
@@ -178,6 +181,7 @@ class Netflix(Constructor):
         
 class Cidds001(Constructor):
     def __init__(self, filepath) -> None:
+        self.label = 'cidds'
         log.info(f"Loading data from {filepath}")
         self.df: pd.DataFrame = pd.read_csv(filepath).iloc[:, :11]
         #* Discard the timestamps for now, and Flows is always 1.

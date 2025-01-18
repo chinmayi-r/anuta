@@ -15,7 +15,8 @@ warnings.filterwarnings("ignore")
 from anuta.grammar import AnutaMilli, Anuta, DomainType
 from anuta.constructor import Constructor, DomainCounter
 from anuta.theory import Theory, Constraint
-from anuta.utils import log, clausify, save_constraints, FLAGS
+from anuta.utils import log, clausify, save_constraints
+from anuta.options import FLAGS
 
 
 anuta : Anuta = None
@@ -92,7 +93,7 @@ def validator(
     violated_rules = [rules[i] for i, is_violated in enumerate(aggregated_violations) if is_violated]
     valid_rules = [rules[i] for i, is_violated in enumerate(aggregated_violations) if not is_violated]
     if save:
-        Theory.save_constraints(violated_rules, f"violated_{label}.rule")
+        Theory.save_constraints(violated_rules, f"violated_{constructor.label}_{label}.rule")
     
     log.info(f"Violatioin rate: {violation_rate:.3%}")
     log.info(f"Runtime time: {end-start:.2f}s\n\n")
@@ -290,7 +291,7 @@ def miner_versionspace(constructor: Constructor, refconstructor: Constructor, li
     print(f"Total rejected: {anuta.num_candidates_rejected} ({anuta.num_candidates_rejected/anuta.num_candidates_proposed:.2%})")
     print(f"Total prior: {len(anuta.prior)}")
     initial_learned = len(anuta.kb)
-    Theory.save_constraints(anuta.kb | anuta.prior, f'learned_{label}.rule')
+    Theory.save_constraints(anuta.kb | anuta.prior, f'learned_{constructor.label}_{label}.rule')
     
     anuta.kb = validate_candidates(refconstructor)
     print(f"Total proposed: {anuta.num_candidates_proposed}")
@@ -298,7 +299,7 @@ def miner_versionspace(constructor: Constructor, refconstructor: Constructor, li
     print(f"Final learned: {len(anuta.kb)} ({len(anuta.kb)/anuta.num_candidates_proposed:.2%})")
     
     #* Prior: [(X!=2 & X!=3 & ...), (Y=500 | Y=400 | ...)]
-    Theory.save_constraints(anuta.kb | anuta.prior, f'learned_{label}_checked.rule')
+    Theory.save_constraints(anuta.kb | anuta.prior, f'learned_{constructor.label}_{label}_checked.rule')
     print(f"Runtime: {end-start:.2f}s\n\n")
     
     # if len(anuta.kb) <= 200: 
@@ -370,7 +371,7 @@ def miner_valiant(constructor: Constructor, limit: int = 0):
     removed_count = len(anuta.candidates) - len(learned_kb)
     # pprint(aggregated_bounds)
     print(f"{len(learned_kb)=}, {len(anuta.candidates)=} ({removed_count=})")
-    Theory.save_constraints(learned_kb, f'learned_{label}.rule')
+    Theory.save_constraints(learned_kb, f'learned_{constructor.label}_{label}.rule')
     print(f"Learning time: {end-start:.2f}s\n\n")
     
     if len(learned_kb) <= 200: 
@@ -389,7 +390,7 @@ def miner_valiant(constructor: Constructor, limit: int = 0):
         print(f"Pruning time: {end-start:.2f}s\n\n")
         
         anuta.learned_kb = reduced_kb + anuta.prior_kb
-        Theory.save_constraints(anuta.learned_kb, f'reduced_{label}.rule')
+        Theory.save_constraints(anuta.learned_kb, f'reduced_{constructor.label}_{label}.rule')
         
 
 window = 10

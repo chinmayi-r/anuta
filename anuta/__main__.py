@@ -17,7 +17,8 @@ warnings.filterwarnings("ignore")
 from anuta.constructor import Constructor, Millisampler, Cidds001, Netflix
 from anuta.theory import Theory
 from anuta.miner import miner_versionspace, miner_valiant, validator
-from anuta.utils import FLAGS, log
+from anuta.utils import log
+from anuta.options import FLAGS
 
     
 def main(constructor: Constructor, refconstructor: Constructor, limit: int):
