@@ -529,12 +529,18 @@ class Anuta(object):
                         var, limit = lhs.expr.args
                         assert isinstance(limit, sp.Integer), f"Unexpected {limit=} in {lhs}"
                         assert isinstance(var, sp.Symbol), f"Unexpected {var=} in {lhs}"
+                        if limit == 0 and type(lhs.expr) == sp.StrictLessThan:
+                            #! Assume all vars are non-negative for now.
+                            continue
                         constants = self.constants.get(str(var))
                         assert constants, f"Missing constants for {var=}."
                         rank, maxrank = constants.values.index(limit), len(constants.values) - 1
                         #* Premise has to start with the most general limit.
-                        if (type(lhs.expr) == sp.StrictGreaterThan and rank == maxrank)\
-                            or (type(lhs.expr) == sp.StrictLessThan and rank == 0):
+                        #! When there's only one constant, rank == maxrank == 0.
+                        if maxrank != 0 and (
+                            (type(lhs.expr) == sp.StrictGreaterThan and rank == maxrank) or
+                            (type(lhs.expr) == sp.StrictLessThan and rank == 0)
+                        ):
                             self.num_candidates_rejected += 1
                             self.num_candidates_proposed += 1
                             continue
@@ -543,12 +549,17 @@ class Anuta(object):
                         var, limit = conclusion.expr.args
                         assert isinstance(limit, sp.Integer), f"Unexpected {type(limit)=} in {conclusion}"
                         assert isinstance(var, sp.Symbol), f"Unexpected {var=} in {conclusion}"
+                        if limit == 0 and type(lhs.expr) == sp.StrictLessThan:
+                            #! Assume all vars are non-negative for now.
+                            continue
                         constants = self.constants.get(str(var))
                         assert constants, f"Missing constants for {var=}."
                         rank, maxrank = constants.values.index(limit), len(constants.values) - 1
                         #* Conclusion has to end with the most specific limit.
-                        if (type(conclusion.expr) == sp.StrictGreaterThan and rank == 0)\
-                            or (type(conclusion.expr) == sp.StrictLessThan and rank == maxrank):
+                        if maxrank != 0 and (
+                            (type(conclusion.expr) == sp.StrictGreaterThan and rank == 0) or 
+                            (type(conclusion.expr) == sp.StrictLessThan and rank == maxrank)
+                        ):
                             self.num_candidates_rejected += 1
                             self.num_candidates_proposed += 1
                             continue

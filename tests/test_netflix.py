@@ -10,20 +10,18 @@ from anuta.theory import Theory
 @pytest.fixture
 def cases() -> List[Dict[str, str]]:
     """Fixture to load the queries from the JSON file."""
-    path = "tests/queries/cidds_queries.json"
+    path = "tests/queries/netflix_queries.json"
     with open(path, 'r') as f:
         return json.load(f)
 
 @pytest.fixture
 def theory() -> Theory:
-    # modelpath = 'results/cidds/nodc/learned_8192.rule'
-    # modelpath = 'results/cidds/nodc/learned_1024_checked.rule'
-    # modelpath = 'results/cidds/nodc/learned_256_checked.rule'
-    # modelpath = 'results/cidds/dc/learned_256.rule'
-    modelpath = 'results/cidds/dc/learned_4096_checked.rule'
+    # modelpath = 'results/netflix/nodc/learned_netflix_64.rule'
+    # modelpath = 'results/netflix/dc/learned_netflix_4096.rule'
+    modelpath = 'learned_netflix_128.rule'
     return Theory(modelpath)
 
-def test_cidds(cases: List[Dict[str, str]], theory: Theory) -> None:
+def test_netflix(cases: List[Dict[str, str]], theory: Theory) -> None:
     """Test that prints the description of each query."""
     successes = 0
     total_queries = 0
@@ -37,7 +35,6 @@ def test_cidds(cases: List[Dict[str, str]], theory: Theory) -> None:
         new_successes = 0
         for query in cases:
             entailed = theory.proves(query, verbose=False)
-            # assert entailed, f"Failed Test #{i}"
             if entailed:
                 new_successes += 1
             else:

@@ -10,7 +10,7 @@ import sys
 from anuta.grammar import AnutaMilli, Bounds, Anuta, Domain, DomainType, ConstantType, Constants
 from anuta.known import *
 from anuta.utils import *
-from anuta.options import FLAGS
+from anuta.cli import FLAGS
 
 
 #* Load configurations.

@@ -16,7 +16,7 @@ from anuta.grammar import AnutaMilli, Anuta, DomainType
 from anuta.constructor import Constructor, DomainCounter
 from anuta.theory import Theory, Constraint
 from anuta.utils import log, clausify, save_constraints
-from anuta.options import FLAGS
+from anuta.cli import FLAGS
 
 
 anuta : Anuta = None
@@ -59,7 +59,7 @@ def validator(
     start = perf_counter()
     
     #* Prepare arguments for parallel processing
-    nworkers = core_count = psutil.cpu_count()
+    nworkers = core_count = psutil.cpu_count() if not FLAGS.cores else FLAGS.cores
     dfpartitions = [df.reset_index(drop=True) for df in np.array_split(constructor.df, core_count)]
     
     if len(rules) <= core_count:
@@ -218,7 +218,7 @@ def miner_versionspace(constructor: Constructor, refconstructor: Constructor, li
     start = perf_counter()
     
     #* Prepare arguments for parallel processing
-    core_count = psutil.cpu_count()
+    core_count = psutil.cpu_count() if not FLAGS.cores else FLAGS.cores
     dfpartitions = [df.reset_index(drop=True) for df in np.array_split(constructor.df, core_count)]
     indexsets, fcounts = zip(*[constructor.get_indexset_and_counter(df, anuta.domains) for df in dfpartitions])
     fullindexsets, fullfcounts = constructor.get_indexset_and_counter(constructor.df, anuta.domains)
@@ -328,7 +328,7 @@ def miner_valiant(constructor: Constructor, limit: int = 0):
     
     start = perf_counter()
     #* Prepare arguments for parallel processing
-    core_count = psutil.cpu_count()
+    core_count = psutil.cpu_count() if not FLAGS.cores else FLAGS.cores
     # core_count = 1
     log.info(f"Spawning {core_count} workers ...")
     # mutex = Manager().Lock()

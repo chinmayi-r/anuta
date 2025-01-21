@@ -31,8 +31,7 @@ flags.DEFINE_string("rules", "", "Path to the learned rules")
 flags.DEFINE_boolean("baseline", False, "Use the baseline method Valiant algorithm")
 #* Use `-nodc` to disable domain counting
 flags.DEFINE_boolean("dc", True, "Enable domain counting")
-# flags.DEFINE_integer("size", -1, "")
-# flags.DEFINE_boolean("vs", True, "Dummy flag to accomodate pytest")
+flags.DEFINE_integer("cores", None, "Maximum number of cores allowed to use")
 
 config_flags.DEFINE_config_file("config", default="./configs/default.py")
 FLAGS(sys.argv)
