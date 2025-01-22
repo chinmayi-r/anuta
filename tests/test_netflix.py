@@ -16,9 +16,9 @@ def cases() -> List[Dict[str, str]]:
 
 @pytest.fixture
 def theory() -> Theory:
-    # modelpath = 'results/netflix/nodc/learned_netflix_64.rule'
-    # modelpath = 'results/netflix/dc/learned_netflix_4096.rule'
-    modelpath = 'learned_netflix_128.rule'
+    # modelpath = 'results/netflix/nodc/learned_netflix_64.pl'
+    modelpath = 'results/netflix/dc/learned_netflix_32.rule'
+    # modelpath = 'learned_netflix_128.pl'
     return Theory(modelpath)
 
 def test_netflix(cases: List[Dict[str, str]], theory: Theory) -> None:

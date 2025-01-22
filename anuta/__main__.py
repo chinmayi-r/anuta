@@ -1,3 +1,4 @@
+from pathlib import Path
 from multiprocess import Pool, Manager, managers
 import numpy as np
 import psutil
@@ -75,15 +76,26 @@ if __name__ == '__main__':
         
         assert FLAGS.rules, "No rules file provided."
         rulepath = FLAGS.rules
-        assert rulepath.endswith('.rule'), "Invalid rule file."
+        assert rulepath.endswith('.pl'), "Invalid rule file."
         rules = Theory.load_constraints(rulepath, False)
         rule_label = int(rulepath.split('_')[1])
+        checked = 'checked' in rulepath
         label = f"{data_label}-{rule_label}"
         
-        log.info(f"Validating {limit} samples from {FLAGS.data} using {rulepath}")
+        log.info(f"Validating {len(constructor.df)} samples from {FLAGS.data} using {rulepath}")
         
-        validator(constructor, rules, label)
-    
+        violation_rate = validator(constructor, rules, label)
+        violation_record = ','.join([data_label, str(rule_label), str(checked), str(violation_rate)])
+        #TODO: Specify all file names in the config file.
+        violation_file = f"violation.csv"
+        if Path(violation_file).exists():
+            with open(violation_file, 'a') as f:
+                f.write(violation_record + '\n')
+        else:
+            with open(violation_file, 'w') as f:
+                f.write("data,rule,checked,violation_rate\n")
+                f.write(violation_record + '\n')
+
     sys.exit(
         pprint("Configuration:", dict(FLAGS.config), sep='\n')
     )

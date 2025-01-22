@@ -151,7 +151,7 @@ def save_constraints(constraints: List[sp.Expr], fname: str='constraints'):
     # Convert expressions to strings
     # expressions_str = [str(expr) for expr in constraints]
 
-    with open(f"{fname}.rule", 'w') as f:
+    with open(f"{fname}.pl", 'w') as f:
         for constraint in constraints:
             f.write(sp.srepr(constraint) + '\n')
         # json.dump(expressions_str, f, indent=4, sort_keys=True)
@@ -163,7 +163,7 @@ def save_constraints(constraints: List[sp.Expr], fname: str='constraints'):
 
 def load_constraints(fname: str='constraints') -> List[sp.Expr]:
     constraints = []
-    with open(f"{fname}.rule", 'r') as f:
+    with open(f"{fname}.pl", 'r') as f:
         for line in f:
             constraints.append(sp.sympify(line.strip()))
     return constraints

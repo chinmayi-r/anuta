@@ -11,7 +11,7 @@ python anuta -dataset=cidds -data=data/CIDDS/cidds_wk3_4k.csv
 python anuta -learn -dataset=cidds -data=data/cidds_wk3_all.csv -baseline -limit=512
 python anuta -learn -dataset=cidds -data=data/cidds_wk3_all.csv -baseline -limit=8k (-ref=data/cidds_wk4_all.csv)
 #* Validate dataset
-python anuta -validate -dataset=netflix -data=data/syn/netflix_rtf_syn.csv -limit=1k -rules=results/cidds/confidence/learned_10000_a3.rule
+python anuta -validate -dataset=netflix -data=data/syn/netflix_rtf_syn.csv -limit=1k -rules=results/cidds/confidence/learned_10000_a3.pl
 '''
 FLAGS = flags.FLAGS
 
@@ -20,7 +20,7 @@ flags.DEFINE_boolean("learn", False, "Learn constraints from a dataset")
 flags.DEFINE_boolean("validate", False, "Validate a dataset using a learned theory")
 
 #* Configs
-flags.DEFINE_string("limit", "", "Limit on the number of samples to learn from")
+flags.DEFINE_string("limit", None, "Limit on the number of samples to learn from")
 #TODO: Generalize `dataset` to netflow and pcap.
 flags.DEFINE_enum("dataset", None, ['cidds', 'netflix'], "Name of the dataset to learn from")
 flags.mark_flag_as_required('dataset')
