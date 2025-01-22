@@ -84,7 +84,7 @@ if __name__ == '__main__':
         
         log.info(f"Validating {len(constructor.df)} samples from {FLAGS.data} using {rulepath}")
         
-        violation_rate = validator(constructor, rules, label)
+        violation_rate, _ = validator(constructor, rules, label)
         violation_record = ','.join([data_label, str(rule_label), str(checked), str(violation_rate)])
         #TODO: Specify all file names in the config file.
         violation_file = f"violation.csv"

@@ -91,14 +91,14 @@ def validator(
     
     #* Save violated rules
     violated_rules = [rules[i] for i, is_violated in enumerate(aggregated_violations) if is_violated]
-    # valid_rules = [rules[i] for i, is_violated in enumerate(aggregated_violations) if not is_violated]
+    valid_rules = [rules[i] for i, is_violated in enumerate(aggregated_violations) if not is_violated]
     if save:
         Theory.save_constraints(violated_rules, f"violated_{constructor.label}_{label}.pl")
     
     log.info(f"Violatioin rate: {violation_rate:.3%}")
     log.info(f"Runtime time: {end-start:.2f}s\n\n")
     
-    return violation_rate
+    return violation_rate, valid_rules
 
 def validate_candidates(
         constructor: Constructor,
