@@ -83,7 +83,7 @@ if __name__ == '__main__':
         rulepath = FLAGS.rules
         assert rulepath.endswith('.pl'), "Invalid rule file."
         rules = Theory.load_constraints(rulepath, False)
-        rule_label = int(rulepath.split('_')[1])
+        rule_label = "_".join(rulepath.split('_')[1:])[:-3]
         checked = 'checked' in rulepath
         label = f"{data_label}-{rule_label}"
         

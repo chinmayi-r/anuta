@@ -178,16 +178,18 @@ class Netflix(Constructor):
         # self.df = self.df[self.df['_ws.col.info'].str.contains('Packet size limited during capture')==False]
         self.df['_ws.col.info'], self.df['tcp.window_size_value'] = '', ''
         self.df.drop(columns=['tcp.window_size_value', 'frame.len', '_ws.col.info'], inplace=True)
+        if 'Unnamed: 0' in self.df.columns:
+            self.df.drop(columns=['Unnamed: 0'], inplace=True)
         self.df['tcp.flags'] = self.df['tcp.flags'].apply(parse_tcp_flags)
         self.df = self.df.sort_values(by=['frame.time', 'tcp.seq']).reset_index(drop=True)
         self.df.rename(columns=rename_pcap(self.df.columns), inplace=True)
         
         #! Temporarily remove these columns.
         self.df.drop(columns=['tsval', 'tsecr'], inplace=True)
-        self.df[(self.df.tcp_srcport==443) | (self.df.tcp_srcport==40059)]['ip_src'] = "198.38.120.153"
-        self.df[(self.df.tcp_srcport!=443) & (self.df.tcp_srcport!=40059)]['ip_src'] = "192.168.43.72"
-        self.df[(self.df.tcp_dstport==443) | (self.df.tcp_dstport==40059)]['ip_dst'] = "198.38.120.153"
-        self.df[(self.df.tcp_dstport!=443) & (self.df.tcp_dstport!=40059)]['ip_dst'] = "192.168.43.72"
+        self.df.loc[(self.df.tcp_srcport==443) | (self.df.tcp_srcport==40059), 'ip_src'] = "198.38.120.153"
+        self.df.loc[(self.df.tcp_srcport!=443) & (self.df.tcp_srcport!=40059), 'ip_src'] = "192.168.43.72"
+        self.df.loc[(self.df.tcp_dstport==443) | (self.df.tcp_dstport==40059), 'ip_dst'] = "198.38.120.153"
+        self.df.loc[(self.df.tcp_dstport!=443) & (self.df.tcp_dstport!=40059), 'ip_dst'] = "192.168.43.72"
         
         self.df['ip_src'] = self.df['ip_src'].apply(netflix_ip_map)
         self.df['ip_dst'] = self.df['ip_dst'].apply(netflix_ip_map)

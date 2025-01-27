@@ -25,8 +25,11 @@ def netflix_port_map(port: int):
     elif port in [443, 40059]:
         #^ Server ports
         return 1
+    elif port >= 49152:
+        #^ Application ports
+        return 0
     else:
-        raise ValueError(f"Unknown port for Netflix dataset: {port}")
+        return 1
 
 def netflix_flags_map(flags: str):
     if flags in netflix_flags:
