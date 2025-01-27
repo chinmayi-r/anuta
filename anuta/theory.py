@@ -150,7 +150,7 @@ class Theory(object):
         log.info(f"Theory saved to {path}")
     
     @staticmethod
-    def save_constraints(constraints: List[sp.Expr]|Set[sp.Expr], path: str='constraints.pl'):
+    def save_constraints(constraints: List[sp.Expr]|Set[sp.Expr], path: str='constraints.rule'):
         assert len(constraints) > 0, "No constraints to save."
         constraints = list(constraints)
         if isinstance(constraints[0], Constraint):
@@ -166,7 +166,7 @@ class Theory(object):
         log.info(f"Constraints saved to {path}/json")
 
     @staticmethod
-    def load_constraints(path: str='constraints.pl', wrapper=False) -> List[Constraint | sp.Expr]:
+    def load_constraints(path: str='constraints.rule', wrapper=False) -> List[Constraint | sp.Expr]:
         constraints = []
         with open(f"{path}", 'r') as f:
             for i, line in enumerate(f):

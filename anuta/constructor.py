@@ -77,7 +77,8 @@ class Cicids2017(Constructor):
         self.df = pd.read_csv(filepath)
         todrop = ['Flow_Duration', 'Packet_Length_Mean', 'Fwd_Header_Length','Bwd_Header_Length',
                   'Packet_Length_Std', 'Packet_Length_Variance', 'Fwd_Packets_s', 'Bwd_Packets_s', 
-                  'Total_Fwd_Packets', 'Total_Bwd_Packets']
+                  'Total_Fwd_Packets', 'Total_Bwd_Packets', 'Fwd_PSH_Flags', 'Bwd_PSH_Flags', 
+                  'Fwd_URG_Flags', 'Bwd_URG_Flags']
         # for col in self.df.columns:
         #     if 'std' in col.lower() or 'mean' in col.lower():
         #         todrop.append(col)
@@ -183,6 +184,10 @@ class Netflix(Constructor):
         
         #! Temporarily remove these columns.
         self.df.drop(columns=['tsval', 'tsecr'], inplace=True)
+        self.df[(self.df.tcp_srcport==443) | (self.df.tcp_srcport==40059)]['ip_src'] = "198.38.120.153"
+        self.df[(self.df.tcp_srcport!=443) & (self.df.tcp_srcport!=40059)]['ip_src'] = "192.168.43.72"
+        self.df[(self.df.tcp_dstport==443) | (self.df.tcp_dstport==40059)]['ip_dst'] = "198.38.120.153"
+        self.df[(self.df.tcp_dstport!=443) & (self.df.tcp_dstport!=40059)]['ip_dst'] = "192.168.43.72"
         
         self.df['ip_src'] = self.df['ip_src'].apply(netflix_ip_map)
         self.df['ip_dst'] = self.df['ip_dst'].apply(netflix_ip_map)
