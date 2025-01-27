@@ -855,7 +855,7 @@ class Anuta(object):
     def generate_arity3_constraints(self, arity2_constraints) -> Generator[sp.Expr, None, None]:
         for expression in self.generate_expressions():
             #* Multiplication expressions can't be premises.
-            if type(expression) in [sp.Mul, sp.Add]: continue
+            if type(expression) in [sp.Mul, sp.Add, sp.Symbol]: continue
             
             for constraint in arity2_constraints:
                 #* Dedupe.

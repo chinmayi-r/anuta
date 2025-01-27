@@ -204,10 +204,22 @@ def test_candidates(
             #* Evaluate the constraint with the given assignments
             if isinstance(constraint, Constraint):
                 constraint = constraint.expr
-            sat = constraint.subs(assignments)
-            if not sat:
-                # log.info(f"Violated: {constraint}")
-                violations[k] = 1
+            try:
+                sat = constraint.subs(assignments)
+                if not sat:
+                    violations[k] = 1
+            except Exception as e:
+                if FLAGS.baseline:
+                    #! Temporary fix for the issue with the baseline method 
+                    #! which has negation on literals.
+                    log.error(f"Error evaluating {constraint}:\n{e}")
+                    violations[k] = 1
+                else:
+                    raise e
+            # sat = constraint.subs(assignments)
+            # if not sat:
+            #     # log.info(f"Violated: {constraint}")
+            #     violations[k] = 1
         
     log.info(f"Worker {worker_idx+1} finished.")
     pprint(dict(exhausted_values))
