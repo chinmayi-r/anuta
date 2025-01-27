@@ -54,6 +54,8 @@ def parse_tcp_flags(bitmask) -> str:
     """
     if isinstance(bitmask, str):
         bitmask = int(bitmask, base=16)
+    if bitmask < 0: return ""
+    
     #* Define TCP flags and their corresponding bit positions
     flags = [
         (0x01, "FIN"),  # 0b00000001

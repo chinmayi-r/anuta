@@ -22,7 +22,7 @@ flags.DEFINE_boolean("validate", False, "Validate a dataset using a learned theo
 #* Configs
 flags.DEFINE_string("limit", None, "Limit on the number of samples to learn from")
 #TODO: Generalize `dataset` to netflow and pcap.
-flags.DEFINE_enum("dataset", None, ['cidds', 'netflix'], "Name of the dataset to learn from")
+flags.DEFINE_enum("dataset", None, ['cidds', 'netflix', 'cicids'], "Name of the dataset to learn from")
 flags.mark_flag_as_required('dataset')
 flags.DEFINE_string("data", None, "Path to the dataset to learn from or validate")
 flags.mark_flag_as_required('data')

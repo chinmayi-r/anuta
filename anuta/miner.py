@@ -190,8 +190,12 @@ def test_candidates(
             assignments[var] = val
             
             #* Increment the frequency count of the value of the var.
-            if name in fcount and val in fcount[name]:
-                fcount[name][val].count += 1
+            if name in fcount:
+                if val in fcount[name]:
+                    fcount[name][val].count += 1
+                elif 'neq' in fcount[name]:
+                    #* For numerical values with 'var!=val' index.
+                    fcount[name]['neq'].count += 1
         
         for k, constraint in enumerate(anuta.candidates):
             if violations[k]: 

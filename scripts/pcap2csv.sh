@@ -27,11 +27,15 @@ tshark -r "$1" -T fields -E separator=, -E quote=d -E header=y \
     -e frame.len \
     -e tcp.srcport \
     -e tcp.dstport \
+    -e udp.srcport \
+    -e udp.dstport \
     -e tcp.flags \
     -e tcp.len \
+    -e udp.length \
     -e tcp.seq \
     -e tcp.ack \
     -e tcp.window_size_value \
     -e tcp.options.timestamp.tsval \
     -e tcp.options.timestamp.tsecr \
-    -e _ws.col.Info > "$2"
+    > "$2"
+    # -e _ws.col.Info \

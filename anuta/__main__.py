@@ -15,7 +15,7 @@ import json
 import warnings
 warnings.filterwarnings("ignore")
 
-from anuta.constructor import Constructor, Millisampler, Cidds001, Netflix
+from anuta.constructor import Constructor, Millisampler, Cidds001, Netflix, Cicids2017
 from anuta.theory import Theory
 from anuta.miner import miner_versionspace, miner_valiant, validator
 from anuta.utils import log
@@ -36,6 +36,8 @@ if __name__ == '__main__':
         constructor = Cidds001(FLAGS.data)
     elif dataset == 'netflix':
         constructor = Netflix(FLAGS.data)
+    elif dataset == 'cicids':
+        constructor = Cicids2017(FLAGS.data)
     else:
         raise ValueError(f"Unknown dataset: {dataset}")
     
@@ -60,11 +62,14 @@ if __name__ == '__main__':
             elif dataset == 'netflix':
                 refdata = "data/netflix.csv"
                 refconstructor = Netflix(refdata)
+            elif dataset == 'cicids':
+                refdata = "data/cicids_friday_normal.csv"
+                refconstructor = Cicids2017(refdata)
         else:
             refconstructor = Cidds001(refdata) if dataset == 'cidds' else Netflix(refdata)
             
         log.info(f"Learning from {limit} examples in {FLAGS.data}")
-        log.info(f"Domain counting enabled: {FLAGS.dc}")
+        log.info(f"Domain counting enabled: {FLAGS.config.DOMAIN_COUNTING}")
         log.info(f"Using baseline method: {FLAGS.baseline}")
         log.info(f"Reference data: {refdata}")     
         

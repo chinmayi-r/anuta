@@ -390,13 +390,13 @@ class Anuta(object):
             
             #& Combining two rejected arity-2 implications to form a more general arity-3 constraint.
             log.info(f"Combining rejected arity-2 implications ...")
-            rejected_bounds: List[sp.Expr] = []
+            # rejected_bounds: List[sp.Expr] = []
             rejected_equalities: List[sp.Expr] = []
             for candidate1 in self.candidates:
                 if type(candidate1.expr) != sp.Implies:
-                    if type(candidate1.expr) in [sp.GreaterThan, sp.StrictGreaterThan]:
-                        rejected_bounds.append(candidate1.expr)
-                    elif type(candidate1.expr) in [sp.Equality]:
+                    # if type(candidate1.expr) in [sp.GreaterThan, sp.StrictGreaterThan]:
+                    #     rejected_bounds.append(candidate1.expr)
+                    if type(candidate1.expr) in [sp.Equality]:
                         rejected_equalities.append(candidate1.expr)
                     continue
                 
@@ -441,15 +441,16 @@ class Anuta(object):
             # specialized_rej_bounds = [self.specialize_clause(bound, init=True)[1] for bound in rejected_bounds]
             
             #NOTE: Arity 2 bounds are the most specific.
-            log.info(f"{rejected_bounds=}")
+            # log.info(f"{rejected_bounds=}")
             arity2_bounds = [bound.expr for bound in self._arity2_cache if type(bound.expr) in [sp.GreaterThan, sp.StrictGreaterThan]]
             equality_literals = [literal.expr for literal in self._literal_cache if type(literal.expr) in [sp.Equality, sp.Unequality]]  
-            for i, rejected_bound in enumerate(rejected_bounds):
-                for literal in equality_literals:
-                    #* The rejected bounds are the most general after interative refinement.
-                    #* (rejeceted general bound: sX≥sY) => (A≠a)
-                    composite = Constraint( rejected_bound >> literal )
-                    new_candidates.add(composite)
+            #! Having a rejected bound as a premise is of no use, since true implies anything.
+            # for i, rejected_bound in enumerate(rejected_bounds):
+            #     for literal in equality_literals:
+            #         #* The rejected bounds are the most general after interative refinement.
+            #         #* (rejeceted general bound: sX≥sY) => (A≠a)
+            #         composite = Constraint( rejected_bound >> literal )
+            #         new_candidates.add(composite)
                 
                 #TODO: Add the following to arity-4 constraints.
                 # for j, specialized_bound in enumerate(specialized_rej_bounds):
@@ -713,10 +714,12 @@ class Anuta(object):
                     #     self.prior.add(Constraint(sp.Or(*eq_priors)))
                 elif domain.kind == DomainType.NUMERICAL: 
                     #* For numerical vars w/o associated constants, use the unary identity (NOP).
-                    identity = Constraint(var)
-                    # identity.rank = -1
-                    # identity.maxrank = -1
-                    yield identity
+                    # identity = Constraint(var)
+                    # # identity.rank = -1
+                    # # identity.maxrank = -1
+                    # yield identity
+                    #! Only issue the identity if the var is associated with constant 1.
+                    pass
                     
         log.info(f"Prior size: {len(self.prior)}")
         return

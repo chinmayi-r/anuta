@@ -69,6 +69,102 @@ class Constructor(object):
         ) -> tuple[dict[str, dict[str, np.ndarray]], dict[str, DomainCounter]]:
         pass
 
+class Cicids2017(Constructor):
+    def __init__(self, filepath) -> None:
+        self.label = 'cicids'
+        log.info(f"Loading data from {filepath}")
+        #! This dataset has to be preprocessed (removed nan, inf, spaces in cols, etc.)
+        self.df = pd.read_csv(filepath)
+        todrop = ['Flow_Duration', 'Packet_Length_Mean', 'Fwd_Header_Length','Bwd_Header_Length',
+                  'Packet_Length_Std', 'Packet_Length_Variance', 'Fwd_Packets_s', 'Bwd_Packets_s', 
+                  'Total_Fwd_Packets', 'Total_Bwd_Packets']
+        # for col in self.df.columns:
+        #     if 'std' in col.lower() or 'mean' in col.lower():
+        #         todrop.append(col)
+        if 'Label' in self.df.columns:
+            todrop.append('Label')
+        self.df = self.df.drop(columns=todrop)
+        
+        col_to_var = {col: to_big_camelcase(col, sep='_') for col in self.df.columns}
+        self.df.rename(columns=col_to_var, inplace=True)
+        variables = list(self.df.columns)
+        
+        self.categorical = ['Protocol']
+        domains = {}
+        for name in self.df.columns:
+            if name not in self.categorical:
+                domains[name] = Domain(DomainType.NUMERICAL, 
+                                       Bounds(self.df[name].min().item(), 
+                                              self.df[name].max().item()), 
+                                       None)
+            else:
+                domains[name] = Domain(DomainType.CATEGORICAL, 
+                                       None, 
+                                       self.df[name].unique().tolist())
+        
+        self.constants: dict[str, Constants] = {}
+        for name in self.df.columns:
+            if any(keyword in name.lower() for keyword in ('min', 'mean', 'max', 'std')):
+                self.constants[name] = Constants(
+                    kind=ConstantType.SCALAR,
+                    values=[1] #* Issue identity (global) constraints for these variables.
+                )
+            if any(keyword in name.lower() for keyword in ('packets', 'flag')):
+                self.constants[name] = Constants(
+                    kind=ConstantType.LIMIT,
+                    values=[0] #* Compare these variables to zero (>0)
+                )
+        self.anuta = Anuta(variables, domains, self.constants)
+        pprint(self.anuta.variables)
+        pprint(self.anuta.domains)
+        pprint(self.anuta.constants)
+        return
+    
+    def get_indexset_and_counter(
+            self, df: pd.DataFrame,
+            domains: dict[str, Domain],
+        ) -> tuple[dict[str, dict[str, np.ndarray]], dict[str, DomainCounter]]:
+        indexset = {}
+        #^ dict[var: dict[val: array(indices)]] // Var -> {Distinct value -> indices}
+        for cat in self.categorical:
+            # print(f"Processing {cat}")
+            indices = df.groupby(by=cat).indices
+            indexset[cat] = indices
+        for name in self.constants:
+            if name in indexset:
+                continue
+            constants = self.constants[name]
+            #* Create indexses for numerical variables with associated limits.
+            #! Not ideal since it's only considering ==limit (not >limit or <limit).
+            if constants.kind == ConstantType.LIMIT:
+                for const in constants.values:
+                    indices = df[df[name] == const].index.to_numpy()
+                    if indices.size > 0:
+                        indexset[name] = {const: indices}
+                    indices = df[df[name] != const].index.to_numpy()
+                    if indices.size > 0:
+                        indexset[name] |= {'neq': indices}
+                    
+        #TODO: Create index set also for numerical variables.
+        fcount = defaultdict(dict)
+        #^ dict[var: dict[val: count]] // Var -> {Value of interest -> (count,freq)}
+        for cat in indexset:
+            if cat in self.constants and self.constants[cat].kind != ConstantType.LIMIT:
+                #* Don't enumerate the domain if it has associated constants.
+                values = self.constants[cat].values
+            else:
+                values = indexset[cat].keys()
+            
+            for key in values:
+                #* Initialize the counters to the frequency of the value in the data.
+                #& Prioritize rare values (inductive bias).
+                #& Using the frequency only as a tie-breaker [count, freq].
+                freq = len(indexset[cat][key])
+                dc = DomainCounter(count=0, frequency=freq)
+                fcount[cat] |= {key: dc} if type(key) in [int, str] else {key.item(): dc}
+        return indexset, fcount
+    
+
 class Netflix(Constructor):
     def __init__(self, filepath) -> None:
         self.label = 'netflix'
@@ -148,14 +244,6 @@ class Netflix(Constructor):
         for cat in self.categorical:
             # print(f"Processing {cat}")
             indices = df.groupby(by=cat).indices
-            #! Here, do not filter the indices based on the constants.
-            # print(f"indices: {indices}")
-            # filtered_indices = {}
-            # if cat in self.constants:
-            #     for key in indices:
-            #         if key.item() in self.constants[cat].values:
-            #             filtered_indices[key] = indices[key]
-            # indexset[cat] = filtered_indices
             indexset[cat] = indices
         #TODO: Create index set also for numerical variables.
         fcount = defaultdict(dict)
@@ -229,6 +317,12 @@ class Cidds001(Constructor):
                     kind=ConstantType.SCALAR,
                     #* Sort the values in ascending order.
                     values=sorted(cidds_constants['packet'])
+                )
+            elif 'bytes' in name.lower():
+                self.constants[name] = Constants(
+                    kind=ConstantType.SCALAR,
+                    #* Sort the values in ascending order.
+                    values=sorted(cidds_constants['bytes'])
                 )
                 
         self.anuta = Anuta(variables, domains, self.constants, prior_kb)

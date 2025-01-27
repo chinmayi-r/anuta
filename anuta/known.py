@@ -66,6 +66,8 @@ cidds_ports = [0, 3, 8, 11, 22, 25,
 #* Map strings to integers
 cidds_ip_conversion = bidict({ip: i for i, ip in enumerate(cidds_ips)})
 cidds_flags_conversion = bidict({flag: i for i, flag in enumerate(['noflags', 'flags'])})
+#TODO: Change the mapping to standard NetFlow codes: 
+# https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml
 cidds_proto_conversion = bidict({proto: i for i, proto in enumerate(['TCP', 'UDP', 'ICMP', 'IGMP'])})
 cidds_conversions = {
     'ip': cidds_ip_conversion,
@@ -76,6 +78,7 @@ cidds_constants = {
 	'ip': list(cidds_conversions['ip'].values()),
 	'port': cidds_ports,
 	'packet': [42, 64, 65_535], #* MTU
+    'bytes': [1],
 }
 
 def cidds_proto_map(proto: str):
