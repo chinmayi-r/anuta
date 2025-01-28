@@ -16,10 +16,10 @@ def cases() -> List[Dict[str, str]]:
 
 @pytest.fixture
 def theory() -> Theory:
-    modelpath = 'rules/cicids/nodc/learned_cicids_2048.pl'
+    # modelpath = 'rules/cicids/nodc/learned_cicids_2048.pl'
     # modelpath = 'rules/cicids/nodc/learned_cicids_128_checked.pl'
     # modelpath = 'rules/cicids/dc/learned_cicids_1024.pl'
-    # modelpath = 'rules/cicids/dc/learned_cicids_4096.pl'
+    modelpath = 'rules/cicids/dc/learned_cicids_8192.pl'
     return Theory(modelpath)
 
 def test_cicids(cases: List[Dict[str, str]], theory: Theory) -> None:

@@ -77,8 +77,9 @@ class Cicids2017(Constructor):
         self.df = pd.read_csv(filepath)
         todrop = ['Flow_Duration', 'Packet_Length_Mean', 'Fwd_Header_Length','Bwd_Header_Length',
                   'Packet_Length_Std', 'Packet_Length_Variance', 'Fwd_Packets_s', 'Bwd_Packets_s', 
-                  'Total_Fwd_Packets', 'Total_Bwd_Packets', 'Fwd_PSH_Flags', 'Bwd_PSH_Flags', 
-                  'Fwd_URG_Flags', 'Bwd_URG_Flags']
+                  'Total_Fwd_Packets', 'Total_Bwd_Packets', 
+                #   'Fwd_PSH_Flags', 'Bwd_PSH_Flags', 'Fwd_URG_Flags', 'Bwd_URG_Flags'
+                  ]
         # for col in self.df.columns:
         #     if 'std' in col.lower() or 'mean' in col.lower():
         #         todrop.append(col)
@@ -89,8 +90,8 @@ class Cicids2017(Constructor):
         col_to_var = {col: to_big_camelcase(col, sep='_') for col in self.df.columns}
         self.df.rename(columns=col_to_var, inplace=True)
         variables = list(self.df.columns)
-        
         self.categorical = ['Protocol']
+        
         domains = {}
         for name in self.df.columns:
             if name not in self.categorical:
