@@ -89,8 +89,8 @@ def validator(
     aggregated_violations = aggregated_violations[:-1] #* Remove the last value
     aggregated_counts = np.sum(violation_indices, axis=0) \
         if nworkers > 1 else violation_indices
-    total_invalid_samples = aggregated_violations[-1]
-    aggregated_violations = aggregated_violations[:-1] #* Remove the last value
+    total_invalid_samples = aggregated_counts[-1]
+    aggregated_counts = aggregated_counts[:-1] #* Remove the last value
     assert len(aggregated_violations) == len(rules), \
         f"{len(aggregated_violations)=} != {len(rules)=}"
     
