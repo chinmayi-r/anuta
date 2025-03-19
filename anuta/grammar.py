@@ -422,6 +422,7 @@ class Anuta(object):
                         #* Specifics: (A=>B)+(C=>B) -> More general: ((A & C) => B)
                         if (type(premise1.expr) == type(premise2.expr) and
                             premise1.expr.args[0] == premise2.expr.args[0]):
+                            #! This doesn't work!
                             #* Ignore (A=1 & A=2) ⇒ B=3
                             self.num_candidates_rejected += 1
                             self.num_candidates_proposed += 1

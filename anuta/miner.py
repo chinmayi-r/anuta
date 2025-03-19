@@ -31,6 +31,7 @@ def validate(
     log.info(f"Worker {worker_idx+1} started.")
     #* >0: Violated, 0: Not violated
     violations = [0 for _ in range(len(rules))]
+    invalid_samples = set()
     
     for i, sample in tqdm(dfpartition.iterrows(), total=len(dfpartition)):
         assignments = sample.to_dict()
@@ -43,10 +44,13 @@ def validate(
             try:
                 if not sat:
                     violations[k] += 1
+                    invalid_samples.add(i)
             except Exception as e:
                 log.error(f"Error evaluating {rule}:\n{e}")
                 pprint("Assignments:", assignments)
                 exit(1)
+    #* The last value is the number of invalid samples.
+    violations.append(len(invalid_samples))
     log.info(f"Worker {worker_idx+1} finished.")
     return violations
 
@@ -82,8 +86,11 @@ def validator(
     log.info(f"Aggregating violations ...")
     aggregated_violations = np.logical_or.reduce(violation_indices) \
         if nworkers > 1 else violation_indices
+    aggregated_violations = aggregated_violations[:-1] #* Remove the last value
     aggregated_counts = np.sum(violation_indices, axis=0) \
         if nworkers > 1 else violation_indices
+    total_invalid_samples = aggregated_violations[-1]
+    aggregated_violations = aggregated_violations[:-1] #* Remove the last value
     assert len(aggregated_violations) == len(rules), \
         f"{len(aggregated_violations)=} != {len(rules)=}"
     
@@ -100,6 +107,7 @@ def validator(
         np.save(f"violation_counts_{constructor.label}_{label}.npy", aggregated_counts)        
     
     log.info(f"Violatioin rate: {violation_rate:.3%}")
+    log.info(f"Total invalid samples: {total_invalid_samples}/{len(constructor.df)}")
     log.info(f"Runtime time: {end-start:.2f}s\n\n")
     
     return violation_rate, valid_rules
