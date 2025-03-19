@@ -2,6 +2,7 @@ import logging
 from typing import *
 import sympy as sp
 import pandas as pd
+from collections import defaultdict
 
 true = sp.logic.true
 false = sp.logic.false
@@ -17,6 +18,48 @@ handler.setFormatter(formatter)
 log.addHandler(handler)
 log.setLevel(logging.INFO)
 
+
+def transform_consequent(expression):
+    """
+    Transform an implication so that terms in the consequent (right-hand side)
+    are grouped by variable:
+        - Same variable -> OR relationship
+        - Different variables -> AND relationship
+    """
+    if not isinstance(expression, sp.Implies):
+        raise ValueError("The input must be an Implies expression.")
+    
+    antecedent = expression.args[0]  # Left-hand side
+    consequent = expression.args[1]  # Right-hand side
+
+    # Step 1: Collect terms in the consequent
+    terms_by_variable = defaultdict(list)
+
+    def collect_terms(expr):
+        """Recursively collect terms and group by variable."""
+        if isinstance(expr, (sp.And, sp.Or)):  # If it's a logical combination
+            for arg in expr.args:
+                collect_terms(arg)
+        else:  # If it's an individual equality or inequality
+            # assert len(expr.args)==2, f"Unexpected form: {expr}, {expression=}"
+            if not isinstance(expr, sp.Symbol):
+                variable = expr.lhs  # Extract variable (e.g., DstIpAddr in Eq(DstIpAddr, 1))
+                terms_by_variable[variable].append(expr)
+
+    collect_terms(consequent)
+
+    # Step 2: Reconstruct the consequent with OR-grouped terms
+    new_consequent_terms = []
+    for var, terms in terms_by_variable.items():
+        if len(terms) > 1:
+            new_consequent_terms.append(sp.Or(*terms))  # OR-grouped if same variable
+        else:
+            new_consequent_terms.append(terms[0])  # Single term remains unchanged
+
+    new_consequent = sp.And(*new_consequent_terms) if len(new_consequent_terms) > 1 else new_consequent_terms[0]
+
+    # Step 3: Construct the new implication
+    return sp.Implies(antecedent, new_consequent)
 
 def generate_sliding_windows(df: pd.DataFrame, stride: int, window: int) -> pd.DataFrame:
     #* Collect rows for the transformed dataframe

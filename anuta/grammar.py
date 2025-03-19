@@ -420,6 +420,12 @@ class Anuta(object):
                     # elif sp.Equivalent(desugar(conclusion1), desugar(conclusion2)):
                     elif conclusion1 == conclusion2:
                         #* Specifics: (A=>B)+(C=>B) -> More general: ((A & C) => B)
+                        if (type(premise1.expr) == type(premise2.expr) and
+                            premise1.expr.args[0] == premise2.expr.args[0]):
+                            #* Ignore (A=1 & A=2) ⇒ B=3
+                            self.num_candidates_rejected += 1
+                            self.num_candidates_proposed += 1
+                            continue
                         composite = Constraint((premise1.expr & premise2.expr) >> conclusion1.expr)
                         
                     if composite.expr in [true, false]:
@@ -467,6 +473,7 @@ class Anuta(object):
                     if Constraint(specialized_bound) in self.kb: 
                         #^ Prevent redundancy: If `Bytes >= 42*Packets` is learned, 
                         #^  don't learn any `... => (Bytes >= 42*Packets)`.
+                        #! This doesn't work! `... => (Bytes >= 42*Packets)` still gets proposed.
                         continue
                     #* (A≠a) => (specialized rejeceted bound: sX≥sY)
                     composite = Constraint( literal >> specialized_bound )

@@ -42,10 +42,6 @@ class Theory(object):
     def __init__(self, path_to_constraints: str):
         self.constraints = Theory.load_constraints(path_to_constraints)
         self._thoery = Theory.create(self.constraints, path_to_constraints)
-        
-    def interpret(self, constraint: sp.Expr, dataset: str='cidds', reverse=False) -> sp.Expr:
-        #TODO: Yield the semantic theory the formula given the mappings in domain knowledge.
-        pass
     
     def proves(self, query: str, verbose: bool=True) -> bool:
         """Checks the existence of a proof of query from theory (syntactic consequence).
@@ -144,14 +140,120 @@ class Theory(object):
         return theory
     
     @staticmethod
+    def coalesce(constraints: List[sp.Expr|Constraint], label: str, save=True) -> sp.Expr:
+        if isinstance(constraints[0], Constraint):
+            rules: List[sp.Expr] = [constraint.expr for constraint in constraints]
+        rules: List[sp.Expr] = list(constraints)
+        
+        coalesced_rules: Dict[str, sp.Expr] = {}
+        conflict_count = 0
+        conflicts = set()
+        for i, rule in tqdm(enumerate(rules), total=len(rules)):
+            if isinstance(rule, sp.Implies):
+                antecedent, consequent = rule.args
+                key = str(clausify(antecedent.copy()))
+                if key in coalesced_rules:
+                    coalesed_rule = coalesced_rules[key]
+                    assert isinstance(coalesed_rule, sp.Implies), f"Expected {i=} {coalesed_rule=} {key=}"
+                    assert len(coalesed_rule.args)==2, f"Expected crule {i=} with 2 args: {rule=} {coalesed_rule=} {key=}"
+                    cconsequent = coalesed_rule.args[1]
+                    #& Coalesce the consequents of the same antecedent.
+                    try:
+                        new_crule = sp.Implies(antecedent, (cconsequent & consequent))
+                    except Exception as e:
+                        print(f"Failed to coalesce {i=} {rule=} {coalesed_rule=} {key=}")
+                        print(f"{antecedent=}\n{cconsequent=}\n{consequent=}")
+                        print(f"{e=}")
+                        exit(1)
+                    
+                    if not isinstance(new_crule, sp.Implies) and sp.Equivalent(new_crule, ~antecedent):
+                        conflict_count += 1
+                        #& Conflict occurred, e.g., (A => B & C) + (A => ~B) = ~A
+                        if isinstance(cconsequent, sp.And):
+                            for term in cconsequent.args:
+                                if sp.Equivalent(consequent, ~term):
+                                    conflict = term
+                                    break
+                            else:
+                                print(f"Coalescing {rule=} {coalesed_rule=} {key=}")
+                                print(f"{new_crule=}")
+                                raise ValueError(f"Negation of {consequent} NOT found in {cconsequent=}")
+                            #* Remove the conflicting term.
+                            new_terms = list(cconsequent.args)
+                            new_terms.remove(conflict)
+                            new_crule = antecedent >> sp.And(*new_terms) 
+                            coalesced_rules[key] = new_crule
+                        else:
+                            #& (A => B) + (A => ~B) = ~A
+                            assert sp.Equivalent(consequent, ~cconsequent), (
+                                    f"Negation of {consequent} NOT found in {cconsequent=}")
+                    # assert isinstance(new_crule, sp.Implies), f"Result {new_crule=} is not an Implication (from {rule=} + {coalesed_rule=})"
+                    # if len(new_crule.args)==1 and sp.Equivalent(new_crule, antecedent):
+                    #     print(f"Collapsed {new_crule=} {rule=} {coalesed_rule=} {key=}")
+                    #     #* Collapsed.
+                    #     conflicts.add(key)
+                    #     conflict_count += 1
+                    # else:
+                else:
+                    assert len(rule.args)==2, f"Expected rule {i=} with 2 args: {rule=} {key=}"
+                    coalesced_rules[key] = rule
+            else:
+                coalesced_rules[hash(rule)] = rule
+        log.info(f"{conflict_count=}")
+                
+        # coalesced = {k: (v.args[0] >> clausify(v.args[1])) for k,v in coalesced.items() if isinstance(v, sp.Implies)}
+        result = []
+        for k, rule in tqdm(coalesced_rules.items(), total=len(coalesced_rules)):
+            # if k in conflicts:
+            #     continue
+            if isinstance(rule, sp.Implies):
+                # result.append( transform_consequent(rule.args[0] >> clausify(rule.args[1])) )
+                result.append( rule.args[0] >> clausify(rule.args[1]) )
+            else:
+                result.append( clausify(rule) )
+        log.info(f"Coalesced {len(result)} constraints by antecedent")
+        
+        groupby_consequent = {}
+        final_result = []
+        for rule in tqdm(result):
+            if not isinstance(rule, sp.Implies):
+                final_result.append(rule)
+                continue 
+            antecedent, consequent = rule.args
+            key = str(consequent)
+            if key in groupby_consequent:
+                grule = groupby_consequent[key]
+                assert len(grule.args)==2, f"Expected {grule=} with 2 args"
+                #& Coalesce the antecedents of the same consequent.
+                groupby_consequent[key] = ( (grule.args[0] | antecedent) >> consequent )
+            else:
+                groupby_consequent[key] = rule
+
+        for rule in groupby_consequent.values():
+            final_result.append( clausify(rule.args[0]) >> rule.args[1] )
+        # final_result = list(groupby_consequent.values())
+        log.info(f"Coalesced {len(final_result)} constraints by consequent")
+        
+        if save:
+            Theory.save_constraints(final_result, f"coalesced_{label}.pl")
+        return final_result
+        
+    
+    def interpret(self, constraint: sp.Expr, dataset: str='cidds', reverse=False) -> sp.Expr:
+        #TODO: Yield the semantic theory the formula given the mappings in domain knowledge.
+        pass
+    
+    @staticmethod
     def save_thoery(theory: sp.Expr, path: str='theories/theory.pkl') -> None:
         with open(f"{path}", 'wb') as f:
             pickle.dump(theory, f, protocol=pickle.HIGHEST_PROTOCOL)
         log.info(f"Theory saved to {path}")
     
     @staticmethod
-    def save_constraints(constraints: List[sp.Expr]|Set[sp.Expr], path: str='constraints.rule'):
-        assert len(constraints) > 0, "No constraints to save."
+    def save_constraints(constraints: List[sp.Expr]|Set[sp.Expr], path: str='constraints.pl'):
+        if len(constraints) == 0:
+            log.info("No constraints to save.")
+            return
         constraints = list(constraints)
         if isinstance(constraints[0], Constraint):
             constraints = [constraint.expr for constraint in constraints]
@@ -166,7 +268,7 @@ class Theory(object):
         log.info(f"Constraints saved to {path}/json")
 
     @staticmethod
-    def load_constraints(path: str='constraints.rule', wrapper=False) -> List[Constraint | sp.Expr]:
+    def load_constraints(path: str='constraints.pl', wrapper=False) -> List[Constraint | sp.Expr]:
         constraints = []
         with open(f"{path}", 'r') as f:
             for i, line in enumerate(f):
@@ -185,3 +287,14 @@ class Theory(object):
                 print(f"Loaded # of constraints:\t{i+1}", end='\r')
         log.info(f"Loaded {len(constraints)} constraints from {path}")
         return constraints
+    
+    @staticmethod
+    def load_rules(path: str='rules.pl.json') -> List[sp.Expr]:
+        rules = []
+        with open(f"{path}", 'r') as f:
+            jsonrules = json.load(f)
+            for rule in jsonrules:
+                rules.append(sp.sympify(rule))
+                print(f"Loaded {len(rules)} rules", end='\r')
+        log.info(f"Loaded {len(rules)} rules from {path}")
+        return rules

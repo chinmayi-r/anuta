@@ -29,20 +29,20 @@ def validate(
     rules: List[sp.Expr]
 ) -> List[int]:
     log.info(f"Worker {worker_idx+1} started.")
-    #* 1: Violated, 0: Not violated
+    #* >0: Violated, 0: Not violated
     violations = [0 for _ in range(len(rules))]
     
     for i, sample in tqdm(dfpartition.iterrows(), total=len(dfpartition)):
         assignments = sample.to_dict()
         for k, rule in enumerate(rules):
-            if violations[k]: 
-                #* This constraint has already been violated.
-                continue
+            # if violations[k]: 
+            #     #* This constraint has already been violated.
+            #     continue
             #* Evaluate the constraint with the given assignments
             sat = rule.subs(assignments)
             try:
                 if not sat:
-                    violations[k] = 1
+                    violations[k] += 1
             except Exception as e:
                 log.error(f"Error evaluating {rule}:\n{e}")
                 pprint("Assignments:", assignments)
@@ -82,18 +82,22 @@ def validator(
     log.info(f"Aggregating violations ...")
     aggregated_violations = np.logical_or.reduce(violation_indices) \
         if nworkers > 1 else violation_indices
+    aggregated_counts = np.sum(violation_indices, axis=0) \
+        if nworkers > 1 else violation_indices
     assert len(aggregated_violations) == len(rules), \
         f"{len(aggregated_violations)=} != {len(rules)=}"
     
-    violation_counter = Counter(aggregated_violations)
-    pprint(violation_counter)
-    violation_rate = violation_counter[True] / len(aggregated_violations)
+    violation_record = Counter(aggregated_violations)
+    pprint(violation_record)
+    violation_rate = violation_record[True] / len(aggregated_violations)
     
-    #* Save violated rules
     violated_rules = [rules[i] for i, is_violated in enumerate(aggregated_violations) if is_violated]
     valid_rules = [rules[i] for i, is_violated in enumerate(aggregated_violations) if not is_violated]
     if save:
+        #* Save violated rules
         Theory.save_constraints(violated_rules, f"violated_{constructor.label}_{label}.pl")
+        #* Save aggregated violation counts as an array
+        np.save(f"violation_counts_{constructor.label}_{label}.npy", aggregated_counts)        
     
     log.info(f"Violatioin rate: {violation_rate:.3%}")
     log.info(f"Runtime time: {end-start:.2f}s\n\n")
