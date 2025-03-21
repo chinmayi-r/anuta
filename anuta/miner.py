@@ -308,7 +308,8 @@ def miner_versionspace(constructor: Constructor, refconstructor: Constructor, li
 
         # log.info(f"Removed {len(anuta.candidates)-len(new_candidates)} candidates.")
         #TODO: Don't reuse `candidates`, use `rejected`.
-        anuta.candidates = new_candidates
+        #! Convert to a list to preserve order!!!
+        anuta.candidates = list(new_candidates)
         new_size = len(anuta.kb)
         log.info(f"Learned {new_size-old_size} candidates.")
     #> End of while loop
