@@ -1,4 +1,4 @@
-import sys
+# import sys
 from absl import flags
 from ml_collections import config_flags
 
@@ -34,5 +34,5 @@ flags.DEFINE_boolean("dc", True, "Enable domain counting")
 flags.DEFINE_integer("cores", None, "Maximum number of cores allowed to use")
 
 config_flags.DEFINE_config_file("config", default="./configs/default.py")
-FLAGS(sys.argv)
+# FLAGS(sys.argv)
 ########### End of Command line options ###########

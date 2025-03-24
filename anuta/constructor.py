@@ -13,8 +13,8 @@ from anuta.utils import *
 from anuta.cli import FLAGS
 
 
-#* Load configurations.
-cfg = FLAGS.config
+# #* Load configurations.
+# cfg = FLAGS.config
 
 @dataclass
 class DomainCounter:

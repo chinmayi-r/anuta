@@ -20,8 +20,8 @@ from anuta.cli import FLAGS
 
 
 anuta : Anuta = None
-#* Load configurations.
-cfg = FLAGS.config
+# #* Load configurations.
+# cfg = FLAGS.config
 
 def validate(
     worker_idx: int, 
@@ -164,7 +164,7 @@ def test_candidates(
     exhausted_values[f"Worker {worker_idx}"] = 'Exhausted Domain Values'
     
     for i in tqdm(range(limit), total=limit):
-        if cfg.DOMAIN_COUNTING:
+        if FLAGS.config.DOMAIN_COUNTING:
             '''Domain Counting'''
             visited = set()
             index = None
@@ -242,7 +242,7 @@ def miner_versionspace(constructor: Constructor, refconstructor: Constructor, li
     #* Use a global var to prevent passing the object to each worker.
     anuta = constructor.anuta
     label = str(limit)
-    cfg.ARITY_LIMIT = 3
+    FLAGS.config.ARITY_LIMIT = 3
     start = perf_counter()
     
     #* Prepare arguments for parallel processing
@@ -254,7 +254,7 @@ def miner_versionspace(constructor: Constructor, refconstructor: Constructor, li
     assert fullindexsets; assert fullfcounts
     pprint(fcounts[0])
     
-    while anuta.search_arity <= cfg.ARITY_LIMIT:
+    while anuta.search_arity <= FLAGS.config.ARITY_LIMIT:
         anuta.propose_new_candidates()
         
         log.info(f"Started testing arity-{anuta.search_arity} constraints.")
@@ -346,7 +346,7 @@ def miner_versionspace(constructor: Constructor, refconstructor: Constructor, li
     #     print(f"{len(anuta.kb)=}, {len(reduced_kb)=} ({pruned_count=})\n")
     #     print(f"Pruning time: {end-start:.2f}s\n\n")
         
-    #     Theory.save_constraints(anuta.kb, f'pruned_{label}_a{cfg.ARITY_LIMIT}.pl')
+    #     Theory.save_constraints(anuta.kb, f'pruned_{label}_a{FLAGS.config.ARITY_LIMIT}.pl')
 
 def miner_valiant(constructor: Constructor, limit: int = 0):
     global anuta

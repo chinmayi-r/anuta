@@ -29,6 +29,8 @@ def main(constructor: Constructor, refconstructor: Constructor, limit: int):
         miner_versionspace(constructor, refconstructor, limit)
 
 if __name__ == '__main__':
+    FLAGS(sys.argv)
+    
     assert '.csv' in FLAGS.data, "Data file is not CSV."
     data_label = FLAGS.data.split('/')[-1].split('.')[-2]
     dataset = FLAGS.dataset.lower()
