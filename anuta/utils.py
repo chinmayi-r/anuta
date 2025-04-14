@@ -3,6 +3,7 @@ from typing import *
 import sympy as sp
 import pandas as pd
 from collections import defaultdict
+import z3
 
 true = sp.logic.true
 false = sp.logic.false
@@ -18,6 +19,14 @@ handler.setFormatter(formatter)
 log.addHandler(handler)
 log.setLevel(logging.INFO)
 
+
+#* Mapping Sympy to Z3 operators:
+def eq_expr(a, b): return a == b
+def ne_expr(a, b): return a != b
+def and_expr(*args): return z3.And(*args)
+def or_expr(*args): return z3.Or(*args)
+def implies_expr(a, b): return z3.Implies(a, b)
+z3evalmap = {'Eq': eq_expr, 'Ne': ne_expr, 'And': and_expr, 'Or': or_expr, 'Implies': implies_expr}
 
 def transform_consequent(expression):
     """
