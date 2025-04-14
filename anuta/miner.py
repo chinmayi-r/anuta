@@ -106,8 +106,8 @@ def validator(
         #* Save aggregated violation counts as an array
         np.save(f"violation_counts_{constructor.label}_{label}.npy", aggregated_counts)        
     
-    log.info(f"Violatioin rate: {violation_rate:.3%}")
-    log.info(f"Total invalid samples: {total_invalid_samples}/{len(constructor.df)}")
+    log.info(f"Rule violatioin rate: {violation_rate:.3%}")
+    log.info(f"Invalid samples: {total_invalid_samples}/{len(constructor.df)}")
     log.info(f"Runtime time: {end-start:.2f}s\n\n")
     
     return violation_rate, valid_rules
