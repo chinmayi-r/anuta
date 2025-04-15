@@ -207,7 +207,7 @@ if __name__ == "__main__":
     G = nx.DiGraph()
     parents = []
     nodeid = 0
-    for col in tqdm(ciddf.columns[1:]):
+    for col in ciddf.columns[1:]:
         domain = ciddf[col].unique()
         dtype = ciddf.dtypes[col]
         varname = to_big_camelcase(col)
@@ -216,6 +216,7 @@ if __name__ == "__main__":
         
         old_id = nodeid
         if dtype in [np.float64, np.int64] and 'Pt' not in col:
+            print(f"Processing {col}...")
             bounds = min(domain), max(domain)
             for p in parents:
                 path_values = []
@@ -286,7 +287,7 @@ if __name__ == "__main__":
                 varval = map_to_z3var_value(varname, val, dtype, 'cidds')    
                 varvals.add(varval)
             
-            for i, z3val in enumerate(varvals):
+            for i, z3val in tqdm(enumerate(varvals), total=len(varvals), desc=f"Processing {varname}"):
                 for p in parents:
                     path_values = []
                     path = get_paths_to_root(G, p)
@@ -317,8 +318,8 @@ if __name__ == "__main__":
                         G.add_node(nodeid, varname=varname, value=domain[i], bounds=None)
                         G.add_edge(p, nodeid)
                         nodeid += 1
-                    else:
-                        print(f"Invalid path: {path_values}->{(varname, domain[i])}", end='\r')
+                    # else:
+                    #     print(f"Invalid path: {path_values}->{(varname, domain[i])}", end='\r')
                 if not parents:
                     G.add_node(nodeid, varname=varname, value=domain[i], bounds=None)
                     nodeid += 1
