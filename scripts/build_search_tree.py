@@ -209,7 +209,9 @@ if __name__ == "__main__":
     nodeid = 0
     for col in ciddf.columns[1:]:
         print(f"Processing {col} (#nodes={nodeid}):")
-        domain = ciddf[col].unique()
+        #! Since we're only considering known ports, we should 
+        #TODO:  allow the model to generate any private ports!!!
+        domain = ciddf[col].unique() if 'Pt' not in col else cidds_ports
         dtype = ciddf.dtypes[col]
         varname = to_big_camelcase(col)
         z3var = z3.Real(varname) if dtype==np.float64 else z3.Int(varname)
@@ -271,7 +273,7 @@ if __name__ == "__main__":
                         assert isinstance(lb, z3.ArithRef), f"Unknown {type(lb)=} for {lb=}"
                         lb = z3.RealVal(bounds[0]) \
                             if dtype==np.float64 else z3.IntVal(bounds[0])
-                        display(substituted)
+                        # display(substituted)
                 else:
                     print(f"[Optm] Can't obtain logit lower bound for {z3var}")
                     lb = bounds[0]
@@ -289,7 +291,7 @@ if __name__ == "__main__":
                     else:
                         assert isinstance(ub, z3.ArithRef), f"Unknown {type(ub)=} for {ub=}"
                         ub = bounds[1]
-                        display(substituted)
+                        # display(substituted)
                 else:
                     print(f"[Optm] Can't obtain logit upper bound for {z3var}")
                     ub = bounds[1]
