@@ -268,11 +268,10 @@ if __name__ == "__main__":
                     if isinstance(lb, z3.RatNumRef):
                         lb = float(lb.as_fraction())
                     elif isinstance(lb, z3.IntNumRef):
-                        lb = lb.as_long()
+                        lb = int(lb.as_long())
                     else:
                         assert isinstance(lb, z3.ArithRef), f"Unknown {type(lb)=} for {lb=}"
-                        lb = z3.RealVal(bounds[0]) \
-                            if dtype==np.float64 else z3.IntVal(bounds[0])
+                        lb = bounds[0]
                         # display(substituted)
                 else:
                     print(f"[Optm] Can't obtain logit lower bound for {z3var}")
@@ -287,7 +286,7 @@ if __name__ == "__main__":
                     if isinstance(ub, z3.RatNumRef):
                         ub = float(ub.as_fraction())
                     elif isinstance(ub, z3.IntNumRef):
-                        ub = ub.as_long()
+                        ub = int(ub.as_long())
                     else:
                         assert isinstance(ub, z3.ArithRef), f"Unknown {type(ub)=} for {ub=}"
                         ub = bounds[1]
@@ -337,21 +336,21 @@ if __name__ == "__main__":
                     s.add(substituted)
                     if s.check() == z3.sat:
                         #* Treat nodes with the same value different, do NOT have shared nodes for ease of traversal.
-                        G.add_node(nodeid, varname=varname, value=z3val.as_long(), bounds=None)
+                        G.add_node(nodeid, varname=varname, value=int(z3val.as_long()), bounds=None)
                         G.add_edge(p, nodeid)
                         nodeid += 1
                     # else:
                     #     print(f"Invalid path: {path_values}->{(varname, domain[i])}", end='\r')
                 if not parents:
-                    G.add_node(nodeid, varname=varname, value=z3val.as_long(), bounds=None)
+                    G.add_node(nodeid, varname=varname, value=int(z3val.as_long()), bounds=None)
                     nodeid += 1
         parents = [nid for nid in range(old_id, nodeid)]
     
     end = perf_counter()
-    print(f"Built search tree in {end-start:.2f}s.")
+    print(f"Built trie in {end-start:.2f}s")
     #* Save the graph to a file.
-    save_path = 'results/cidds_search_tree.pkl'
+    save_path = 'results/cidds_trie.pkl'
     with open(save_path, 'wb') as f:
         pickle.dump(G, f, protocol=pickle.HIGHEST_PROTOCOL)
-    print(f"Saved search tree to {save_path}.")
+    print(f"Saved trie to {save_path}.")
         
