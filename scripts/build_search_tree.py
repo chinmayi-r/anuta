@@ -14,7 +14,7 @@ from anuta.utils import to_big_camelcase, z3evalmap
 from anuta.known import cidds_flag_map, cidds_proto_map, cidds_ip_map, cidds_ports, cidds_ints, cidds_reals
 
 
-def get_paths_to_root(G: nx.DiGraph, node):
+def get_path_to_root(G: nx.DiGraph, node):
     path = [node]
     while True:
         preds = list(G.predecessors(node))
@@ -23,7 +23,7 @@ def get_paths_to_root(G: nx.DiGraph, node):
         assert len(preds)==1
         node = preds[0] 
         path.append(node)
-    return path 
+    return list(reversed(path))
 
 def map_to_z3var_value(var_name, value, dtype, dataset):
     var_val = None
@@ -208,35 +208,57 @@ if __name__ == "__main__":
     parents = []
     nodeid = 0
     for col in ciddf.columns[1:]:
+        print(f"Processing {col} (#nodes={nodeid}):")
         domain = ciddf[col].unique()
         dtype = ciddf.dtypes[col]
         varname = to_big_camelcase(col)
         z3var = z3.Real(varname) if dtype==np.float64 else z3.Int(varname)
+        
         relevant_rule = cidds_relevant_rules[varname]
+        #* Compute the common path (only once).
+        common_path = get_path_to_root(G, parents[0])[:-1] if parents else []
+        common_path_values = []
+        for n in common_path:
+            node = G.nodes[n]
+            if node['value'] is not None:
+                var = z3.Int(node['varname'])
+                #! Assuming values are all integers and that floats are with bounds.
+                val = z3.IntVal(node['value'])
+                common_path_values.append((var, val))
+            else:
+                #* Add bounding constraints.
+                assert node['bounds'] is not None
+                var = z3.Int(node['varname']) \
+                    if dtype==np.int64 else z3.Real(node['varname'])
+                lb, ub = node['bounds']
+                #* Amend the relevant rule to include the bounds.
+                relevant_rule = z3.And(relevant_rule, var >= lb)
+                relevant_rule = z3.And(relevant_rule, var <= ub)
         
         old_id = nodeid
         if dtype in [np.float64, np.int64] and 'Pt' not in col:
-            print(f"Processing {col}...")
+            relevant_rule = cidds_relevant_rules[varname]
             bounds = min(domain), max(domain)
-            for p in parents:
-                path_values = []
-                path = get_paths_to_root(G, p)
-                for nid in path:
-                    node = G.nodes[nid]
-                    if node['value'] is not None:
-                        var = z3.Int(node['varname'])
-                        path_values.append((var, node['value']))
-                    else:
-                        #* Add bounding constraints.
-                        assert node['bounds'] is not None
-                        var = z3.Int(node['varname']) \
-                            if dtype==np.int64 else z3.Real(node['varname'])
-                        lb, ub = node['bounds']
-                        relevant_rule = z3.And(relevant_rule, var >= lb)
-                        relevant_rule = z3.And(relevant_rule, var <= ub)
+            for p in tqdm(parents, total=len(parents)):
+                path_values = common_path_values.copy()
+                node = G.nodes[p]
+                if node['value'] is not None:
+                    var = z3.Int(node['varname'])
+                    #! Assuming values are all integers and that floats are with bounds.
+                    val = z3.IntVal(node['value'])
+                    path_values.append((var, val))
+                else:
+                    #* Add bounding constraints.
+                    assert node['bounds'] is not None
+                    var = z3.Int(node['varname']) \
+                        if dtype==np.int64 else z3.Real(node['varname'])
+                    lb, ub = node['bounds']
+                    #! Instantiate a new rule for each parent, otherwise accumulating constraints.
+                    path_rule = z3.And(relevant_rule, var >= lb)
+                    path_rule = z3.And(path_rule, var <= ub)
                 
                 opt = z3.Optimize()
-                substituted = z3.simplify(z3.substitute(relevant_rule, *path_values))
+                substituted = z3.simplify(z3.substitute(path_rule, *path_values))
                 opt.add(substituted)
                 lb = opt.minimize(z3var)
                 if opt.check() == z3.sat:
@@ -278,57 +300,56 @@ if __name__ == "__main__":
                 G.add_edge(p, nodeid)
                 nodeid += 1
             if not parents:
+                #* If it's root, bounds are the domain.
                 G.add_node(nodeid, varname=varname, value=None, bounds=bounds)
                 nodeid += 1
         else:
-            new_parents = []
             varvals = set()        
             for val in domain:
                 varval = map_to_z3var_value(varname, val, dtype, 'cidds')    
                 varvals.add(varval)
             
-            for i, z3val in tqdm(enumerate(varvals), total=len(varvals), desc=f"Processing {varname}"):
+            for i, z3val in tqdm(enumerate(varvals), total=len(varvals)):
                 for p in parents:
-                    path_values = []
-                    path = get_paths_to_root(G, p)
-                    for nid in path:
-                        node = G.nodes[nid]
-                        if node['value'] is not None:
-                            var = z3.Int(node['varname'])
-                            val = map_to_z3var_value(node['varname'], node['value'], dtype, 'cidds')
-                            path_values.append((var, val))
-                        else:
-                            #* Add bounding constraints.
-                            assert node['bounds'] is not None
-                            var = z3.Int(node['varname']) \
-                                if dtype==np.int64 else z3.Real(node['varname'])
-                            lb, ub = node['bounds']
-                            # print(f"Add bounds {lb, ub}")
-                            if float in [type(lb), type(ub)]:
-                                relevant_rule = z3.And(relevant_rule, var >= z3.RealVal(lb))
-                                relevant_rule = z3.And(relevant_rule, var <= z3.RealVal(ub))
-                            else:
-                                relevant_rule = z3.And(relevant_rule, var >= z3.IntVal(lb))
-                                relevant_rule = z3.And(relevant_rule, var <= z3.IntVal(ub))
+                    path_values = common_path_values.copy()    
+                    node = G.nodes[p]
+                    if node['value'] is not None:
+                        var = z3.Int(node['varname'])
+                        #* For some reason, numerics in value pairs have to be explicitly converted, 
+                        #*  while other places don't require.
+                        path_values.append((var, z3.IntVal(node['value'])))
+                    else:
+                        #* Add bounds for numeric vars.
+                        assert node['bounds'] is not None
+                        var = z3.Int(node['varname']) \
+                            if dtype==np.int64 else z3.Real(node['varname'])
+                        lb, ub = node['bounds']
+                        # print(f"Add bounds {lb, ub}")
+                        #! Instantiate a new rule for each parent, otherwise accumulating constraints.
+                        path_rule = z3.And(relevant_rule, var >= lb)
+                        path_rule = z3.And(path_rule, var <= ub)
+                        
+                    #* Check if the path together with the new value is satisfiable.
                     s = z3.Solver()
-                    substituted = z3.simplify(z3.substitute(relevant_rule, (z3var, z3val), *path_values))
+                    substituted = z3.simplify(z3.substitute(path_rule, (z3var, z3val), *path_values))
                     s.add(substituted)
                     if s.check() == z3.sat:
-                        #* Treat nodes with the same value different, do NOT have shared nodes for path traversal.
-                        G.add_node(nodeid, varname=varname, value=domain[i], bounds=None)
+                        #* Treat nodes with the same value different, do NOT have shared nodes for ease of traversal.
+                        G.add_node(nodeid, varname=varname, value=z3val.as_long(), bounds=None)
                         G.add_edge(p, nodeid)
                         nodeid += 1
                     # else:
                     #     print(f"Invalid path: {path_values}->{(varname, domain[i])}", end='\r')
                 if not parents:
-                    G.add_node(nodeid, varname=varname, value=domain[i], bounds=None)
+                    G.add_node(nodeid, varname=varname, value=z3val.as_long(), bounds=None)
                     nodeid += 1
-            parents = new_parents
         parents = [nid for nid in range(old_id, nodeid)]
     
     end = perf_counter()
     print(f"Built search tree in {end-start:.2f}s.")
     #* Save the graph to a file.
-    with open('results/cidds_search_tree.pkl', 'wb') as f:
+    save_path = 'results/cidds_search_tree.pkl'
+    with open(save_path, 'wb') as f:
         pickle.dump(G, f, protocol=pickle.HIGHEST_PROTOCOL)
+    print(f"Saved search tree to {save_path}.")
         
