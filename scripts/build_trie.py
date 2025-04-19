@@ -20,7 +20,7 @@ def get_path_to_root(G: nx.DiGraph, node):
         preds = list(G.predecessors(node))
         if not preds:
             break
-        assert len(preds)==1
+        assert len(preds)==1, f"Multiple predecessors for {node=}: {preds=}"
         node = preds[0] 
         path.append(node)
     return list(reversed(path))
@@ -205,10 +205,13 @@ if __name__ == "__main__":
 
     start = perf_counter()
     G = nx.DiGraph()
+    #* Node naming convention
+    #*  numeric: <parent_id>-><varname> // Single child bounds 
+    #*  catigorical: <parent_id>-><varname>::<varvalue> // Multiple child values
     parents = []
-    nodeid = 0
+    # childid = 0
     for col in ciddf.columns[1:]:
-        print(f"Processing {col} (#nodes={nodeid}):")
+        print(f"Processing {col}:")
         #! Since we're only considering known ports, we should 
         #TODO:  allow the model to generate any private ports!!!
         domain = ciddf[col].unique() if 'Pt' not in col else cidds_ports
@@ -237,8 +240,10 @@ if __name__ == "__main__":
                 relevant_rule = z3.And(relevant_rule, var >= lb)
                 relevant_rule = z3.And(relevant_rule, var <= ub)
         
-        old_id = nodeid
+        # old_id = childid
+        new_parents = []
         if dtype in [np.float64, np.int64] and 'Pt' not in col:
+            #& Numeric vars.
             relevant_rule = cidds_relevant_rules[varname]
             bounds = min(domain), max(domain)
             for p in tqdm(parents, total=len(parents)):
@@ -297,14 +302,19 @@ if __name__ == "__main__":
                     display(substituted)
                 
                 bounds = (lb, ub)
-                G.add_node(nodeid, varname=varname, value=None, bounds=bounds)
-                G.add_edge(p, nodeid)
-                nodeid += 1
+                childid = f"{p}->{varname}"
+                G.add_node(childid, varname=varname, value=None, bounds=bounds)
+                G.add_edge(p, childid)
+                new_parents.append(childid)
+                # childid += 1
             if not parents:
                 #* If it's root, bounds are the domain.
-                G.add_node(nodeid, varname=varname, value=None, bounds=bounds)
-                nodeid += 1
+                childid = f"root->{varname}"
+                G.add_node(childid, varname=varname, value=None, bounds=bounds)
+                new_parents.append(childid)
+                # childid += 1
         else:
+            #& Categorical vars.
             varvals = set()        
             for val in domain:
                 varval = map_to_z3var_value(varname, val, dtype, 'cidds')    
@@ -335,19 +345,26 @@ if __name__ == "__main__":
                     substituted = z3.simplify(z3.substitute(path_rule, (z3var, z3val), *path_values))
                     s.add(substituted)
                     if s.check() == z3.sat:
+                        value = int(z3val.as_long())
+                        childid = f"{p}->{varname}::{value}"
                         #* Treat nodes with the same value different, do NOT have shared nodes for ease of traversal.
-                        G.add_node(nodeid, varname=varname, value=int(z3val.as_long()), bounds=None)
-                        G.add_edge(p, nodeid)
-                        nodeid += 1
+                        G.add_node(childid, varname=varname, value=value, bounds=None)
+                        G.add_edge(p, childid)
+                        new_parents.append(childid)
+                        # childid += 1
                     # else:
                     #     print(f"Invalid path: {path_values}->{(varname, domain[i])}", end='\r')
                 if not parents:
-                    G.add_node(nodeid, varname=varname, value=int(z3val.as_long()), bounds=None)
-                    nodeid += 1
-        parents = [nid for nid in range(old_id, nodeid)]
+                    childid = f"root->{varname}"
+                    G.add_node(childid, varname=varname, value=int(z3val.as_long()), bounds=None)
+                    new_parents.append(childid)
+                    # childid += 1
+        # parents = [nid for nid in range(old_id, childid)]
+        parents = new_parents
     
     end = perf_counter()
     print(f"Built trie in {end-start:.2f}s")
+    print(f"Trie has {G.number_of_nodes()} nodes and {G.number_of_edges()} edges.")
     #* Save the graph to a file.
     save_path = 'results/cidds_trie.pkl'
     with open(save_path, 'wb') as f:
