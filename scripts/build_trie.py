@@ -208,13 +208,14 @@ if __name__ == "__main__":
     #* Node naming convention
     #*  numeric: <parent_id>-><varname> // Single child bounds 
     #*  catigorical: <parent_id>-><varname>::<varvalue> // Multiple child values
+    #TODO: Trim the node IDs? The IDs currently will accumulate the whole path.
     parents = []
     # childid = 0
     for col in ciddf.columns[1:]:
         print(f"Processing {col}:")
         #! Since we're only considering known ports, we should 
-        #TODO:  allow the model to generate any private ports!!!
-        domain = ciddf[col].unique() if 'Pt' not in col else cidds_ports
+        #* -999 for all private ports.
+        domain = ciddf[col].unique() if 'Pt' not in col else cidds_ports + [-999]
         dtype = ciddf.dtypes[col]
         varname = to_big_camelcase(col)
         z3var = z3.Real(varname) if dtype==np.float64 else z3.Int(varname)
