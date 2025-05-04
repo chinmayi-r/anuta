@@ -1,0 +1,30 @@
+FwdPacketLengthMean <= FwdPacketLengthMax
+BwdPacketLengthMean <= BwdPacketLengthMax
+FwdPacketLengthMean >= FwdPacketLengthMin
+BwdPacketLengthMean >= BwdPacketLengthMin
+FwdPacketLengthStd <= FwdPacketLengthMax
+FlowIatMean <= FlowIatMax
+FlowIatMin <= FlowIatMean
+(UrgFlagCount>0) >> (Protocol!=17)
+(FinFlagCount>0) >> (Protocol!=17)
+(SynFlagCount>0) >> (Protocol!=17)
+(RstFlagCount>0) >> (Protocol!=17)
+(PshFlagCount>0) >> (Protocol!=17)
+(AckFlagCount>0) >> (Protocol!=17)
+(CweFlagCount>0) >> (Protocol!=17)
+(EceFlagCount>0) >> (Protocol!=17)
+(UrgFlagCount>0) >> (Protocol!=0)
+(FinFlagCount>0) >> (Protocol!=0)
+(SynFlagCount>0) >> (Protocol!=0)
+(RstFlagCount>0) >> (Protocol!=0)
+(PshFlagCount>0) >> (Protocol!=0)
+(AckFlagCount>0) >> (Protocol!=0)
+(CweFlagCount>0) >> (Protocol!=0)
+(EceFlagCount>0) >> (Protocol!=0)
+((UrgFlagCount>0) | (FinFlagCount>0) | (SynFlagCount>0) | (RstFlagCount>0) | (PshFlagCount>0) | (AckFlagCount>0) | (CweFlagCount>0) | (EceFlagCount>0)) >> (Protocol!=17)
+(SynFlagCount>0) >> (TotalLengthOfFwdPackets>0)
+(RstFlagCount>0) >> (TotalLengthOfFwdPackets>0)
+(CweFlagCount>0) >> (TotalLengthOfFwdPackets>0)
+(EceFlagCount>0) >> (TotalLengthOfFwdPackets>0)
+((SynFlagCount>0) | (RstFlagCount>0) | (CweFlagCount>0) | (EceFlagCount>0)) >> (TotalLengthOfFwdPackets>0)
+FlowIatStd <= FlowIatMax

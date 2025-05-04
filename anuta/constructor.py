@@ -280,7 +280,9 @@ class Cidds001(Constructor):
         log.info(f"Loading data from {filepath}")
         self.df: pd.DataFrame = pd.read_csv(filepath).iloc[:, :11]
         #* Discard the timestamps for now, and Flows is always 1.
-        self.df = self.df.drop(columns=['Date first seen', 'Flows'])
+        for col in ['Date first seen', 'Flows']:
+            if col in self.df.columns:
+                self.df.drop(columns=[col], inplace=True)
         col_to_var = {col: to_big_camelcase(col) for col in self.df.columns}
         self.df.rename(columns=col_to_var, inplace=True)
         variables = list(self.df.columns)

@@ -68,13 +68,13 @@
 		"queries": [
 			"Eq(SrcIpAddr, 3) >> ~(Eq(SrcPt, 137) | Eq(SrcPt, 138))"
 		],
-		"description": "If source IP Address is public, then source Port is neither 137 nor 138."
+		"description": "If source IP Address is public, then source port is neither 137 nor 138."
 	},
 	{
 		"queries": [
 			"Eq(DstIpAddr, 3) >> ~(Eq(DstPt, 137) | Eq(DstPt, 138))"
 		],
-		"description": "If source IP Address is public, then destination Port is neither 137 nor 138."
+		"description": "If destination IP Address is public, then destination port is neither 137 nor 138."
 	},
 	{
 		"queries": [

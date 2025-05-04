@@ -9,6 +9,7 @@ import pickle
 from pathlib import Path
 
 from anuta.utils import *
+from anuta.known import *
 
 
 class Constraint(object):
@@ -238,10 +239,59 @@ class Theory(object):
             Theory.save_constraints(final_result, f"coalesced_{label}.pl")
         return final_result
         
-    
-    def interpret(self, constraint: sp.Expr, dataset: str='cidds', reverse=False) -> sp.Expr:
-        #TODO: Yield the semantic theory the formula given the mappings in domain knowledge.
-        pass
+    @staticmethod
+    def interpret(rules: List[sp.Expr], dataset: str='cidds', 
+                  save_path=None) -> sp.Expr:
+        if dataset != 'cidds':
+            raise ValueError(f"Dataset not supported: {dataset}")
+
+        def interpret_cidds(varname, varval):
+            # varval = int(varval)
+            # if any([op in varval for op in ['=', '≠', '∧', '∨', '⇒', '≥', '×']]):
+            #     return value
+            if not isinstance(varval, int):
+                return varval
+            
+            if 'Ip' in varname:
+                value = cidds_ip_conversion.inverse[varval]
+            elif 'Flags' in varname:
+                value = cidds_flags_conversion.inverse[varval]
+            elif 'Proto' in varname:
+                value = cidds_proto_conversion.inverse[varval]
+            else:
+                value = varval
+            return value
+
+        def eq_str(a, b): return f"({a} = {interpret_cidds(a, b)})"
+        def ne_str(a, b): return f"({a} ≠ {interpret_cidds(a, b)})"
+        def and_str(*args):
+            s = ''
+            for arg in args:
+                s += f"{arg} ∧ "
+            return s[:-3]
+        def or_str(*args):
+            s = ''
+            for arg in args:
+                s += f"{arg} v "
+            return s[:-3]
+        def implies_str(a, b): return f"({a} ⇒ {b})"
+        def sym_str(a): return a
+        def int_str(a): return int(a)
+        def gt_str(a, b): return f"({a} ≥ {b})"
+        def mul_str(a, b): return f"{a}x{b}"
+
+            
+        cidds_interpretation = {
+            'Equality': eq_str, 'Unequality': ne_str, 'And': and_str, 'Or': or_str, 
+            'Implies': implies_str, 'Symbol': sym_str, 'Integer': int_str, 'GreaterThan': gt_str,
+            'Mul': mul_str,
+        }
+        interpreted = [eval(sp.srepr(rule), cidds_interpretation) for rule in rules]
+        if save_path:
+            with open(save_path, 'w') as f:
+                for rule in interpreted:
+                    f.write(rule + '\n')
+        return interpreted
     
     @staticmethod
     def save_thoery(theory: sp.Expr, path: str='theories/theory.pkl') -> None:

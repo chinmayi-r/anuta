@@ -21,7 +21,8 @@ def theory() -> Theory:
     # modelpath = 'results/cidds/nodc/learned_256_checked.pl'
     # modelpath = 'results/cidds/dc/learned_256.pl'
     # modelpath = 'results/cidds/dc/learned_4096_checked.pl'
-    modelpath = 'learned_cidds_128.pl'
+    # modelpath = 'learned_cidds_128.pl'
+    modelpath = 'coalesced_cidds_8k.pl'
     return Theory(modelpath)
 
 def test_cidds(cases: List[Dict[str, str]], theory: Theory) -> None:
