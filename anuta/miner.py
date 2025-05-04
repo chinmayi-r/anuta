@@ -84,11 +84,11 @@ def validator(
     end = perf_counter()
     
     log.info(f"Aggregating violations ...")
-    aggregated_violations = np.logical_or.reduce(violation_indices) \
-        if nworkers > 1 else violation_indices
+    aggregated_violations = np.logical_or.reduce(violation_indices) if nworkers > 1 \
+        else np.logical_or.reduce([violation_indices, np.zeros(len(violation_indices))])
     aggregated_violations = aggregated_violations[:-1] #* Remove the last value
-    aggregated_counts = np.sum(violation_indices, axis=0) \
-        if nworkers > 1 else violation_indices
+    aggregated_counts = np.sum(violation_indices, axis=0) if nworkers > 1 \
+        else np.sum([violation_indices, np.zeros(len(violation_indices))], axis=0)
     total_invalid_samples = aggregated_counts[-1]
     aggregated_counts = aggregated_counts[:-1] #* Remove the last value
     assert len(aggregated_violations) == len(rules), \
