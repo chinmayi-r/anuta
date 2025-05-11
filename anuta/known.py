@@ -90,6 +90,8 @@ def cidds_proto_map(proto: str):
 	return cidds_proto_conversion[proto]
 
 def cidds_ip_map(ip: str):
+    if isinstance(ip, int):
+        return ip
     new_ip = ''
     if ip.startswith('192.168.'):
         new_ip += 'private_'
