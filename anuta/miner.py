@@ -30,7 +30,8 @@ def validate(
 ) -> List[int]:
     log.info(f"Worker {worker_idx+1} started.")
     #* >0: Violated, 0: Not violated
-    violations = [0 for _ in range(len(rules))]
+    rule_violations = [0 for _ in range(len(rules))]
+    sample_violations = [0 for _ in range(len(dfpartition))]
     invalid_samples = set()
     
     for i, sample in tqdm(dfpartition.iterrows(), total=len(dfpartition)):
@@ -43,16 +44,17 @@ def validate(
             sat = rule.subs(assignments)
             try:
                 if not sat:
-                    violations[k] += 1
+                    rule_violations[k] += 1
+                    sample_violations[i] += 1
                     invalid_samples.add(i)
             except Exception as e:
                 log.error(f"Error evaluating {rule}:\n{e}")
                 pprint("Assignments:", assignments)
                 exit(1)
     #* The last value is the number of invalid samples.
-    violations.append(len(invalid_samples))
+    rule_violations.append(len(invalid_samples))
     log.info(f"Worker {worker_idx+1} finished.")
-    return violations
+    return rule_violations, sample_violations
 
 def validator(
     constructor: Constructor, 
@@ -76,19 +78,23 @@ def validator(
         args = [(i, df, rules) for i, df in enumerate(dfpartitions)]
         pool = Pool(core_count)
         log.info(f"Validating constraints in parallel ...")
-        violation_indices = pool.starmap(validate, args)
+        violations = pool.starmap(validate, args)
         log.info(f"All workers finished.")
         pool.close()
     else:
-        violation_indices = validate(0, constructor.df, rules)
+        violations = validate(0, constructor.df, rules)
     end = perf_counter()
     
+    rule_violations, sample_violations = zip(*violations) if nworkers > 1 else violations
+    #* Concatenate sample violations from all workers
+    sample_violations = np.concatenate(sample_violations) if nworkers > 1 \
+        else sample_violations
     log.info(f"Aggregating violations ...")
-    aggregated_violations = np.logical_or.reduce(violation_indices) if nworkers > 1 \
-        else np.logical_or.reduce([violation_indices, np.zeros(len(violation_indices))])
+    aggregated_violations = np.logical_or.reduce(rule_violations) if nworkers > 1 \
+        else np.logical_or.reduce([rule_violations, np.zeros(len(rule_violations))])
     aggregated_violations = aggregated_violations[:-1] #* Remove the last value
-    aggregated_counts = np.sum(violation_indices, axis=0) if nworkers > 1 \
-        else np.sum([violation_indices, np.zeros(len(violation_indices))], axis=0)
+    aggregated_counts = np.sum(rule_violations, axis=0) if nworkers > 1 \
+        else np.sum([rule_violations, np.zeros(len(rule_violations))], axis=0)
     total_invalid_samples = aggregated_counts[-1]
     aggregated_counts = aggregated_counts[:-1] #* Remove the last value
     assert len(aggregated_violations) == len(rules), \
@@ -104,7 +110,8 @@ def validator(
         #* Save violated rules
         Theory.save_constraints(violated_rules, f"violated_{constructor.label}_{label}.pl")
         #* Save aggregated violation counts as an array
-        np.save(f"violation_counts_{constructor.label}_{label}.npy", aggregated_counts)        
+        np.save(f"violation_counts_{constructor.label}_{label}.npy", aggregated_counts)   
+        np.save(f"sample_violations_{constructor.label}_{label}.npy", sample_violations)     
     
     log.info(f"Rule violatioin rate: {violation_rate:.3%}")
     log.info(f"Invalid samples: {total_invalid_samples}/{len(constructor.df)}")
