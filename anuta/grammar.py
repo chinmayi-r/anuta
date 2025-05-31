@@ -31,7 +31,7 @@ class Constants(object):
         return f"{self.kind}, {len(self.values)} constants"
 
 class DomainType(Enum):
-    NUMERIC = auto()
+    NUMERICAL = auto()
     CATEGORICAL = auto()
 
 @dataclass
@@ -664,7 +664,7 @@ class Anuta(object):
                             #! AND for values not in the domain.
                             self.prior.add(Constraint(sp.And(*ne_priors)))
                     case ConstantType.SCALAR:
-                        assert self.domains[name].kind == DomainType.NUMERIC, (
+                        assert self.domains[name].kind == DomainType.NUMERICAL, (
                             f"`SCALAR` constant {self.constants[name]} must be associated with a numerical var.")
                         
                         self.constants[name].values.sort() #* Just in case.
@@ -675,7 +675,7 @@ class Anuta(object):
                         yield lb_constraint
                         yield ub_constraint
                     case ConstantType.LIMIT:
-                        assert self.domains[name].kind == DomainType.NUMERIC, (
+                        assert self.domains[name].kind == DomainType.NUMERICAL, (
                             f"`LIMIT` constant {self.constants[name]} must be associated with a numerical var.")
                         self.constants[name].values.sort() #* Just in case.
                         #? Strict bounds or not?
@@ -691,7 +691,7 @@ class Anuta(object):
                         yield lower_limit
                         yield upper_limit
                     case ConstantType.ADDITION:
-                        assert self.domains[name].kind == DomainType.NUMERIC, (
+                        assert self.domains[name].kind == DomainType.NUMERICAL, (
                             f"`ADDITION` constant {self.constants[name]} must be associated with a numerical var.")
                         # self.constants[name].values.sort() #* Just in case.
                         for const in self.constants[name].values:
@@ -722,7 +722,7 @@ class Anuta(object):
                     # if eq_priors:
                     #     #* Add the prior knowledge (X=1 | X=2 | ...)
                     #     self.prior.add(Constraint(sp.Or(*eq_priors)))
-                elif domain.kind == DomainType.NUMERIC: 
+                elif domain.kind == DomainType.NUMERICAL: 
                     #* For numerical vars w/o associated constants, use the unary identity (NOP).
                     # identity = Constraint(var)
                     # # identity.rank = -1
@@ -772,7 +772,7 @@ class Anuta(object):
                         yield sp.Eq(var, sp.S(value))
                         #* Var != value
                         yield sp.Ne(var, sp.S(value))
-                if domain.kind == DomainType.NUMERIC: 
+                if domain.kind == DomainType.NUMERICAL: 
                     #* Omit numerical vars w/o associated constants for now.
                     continue
         
@@ -812,7 +812,7 @@ class Anuta(object):
                 
             elif type(expr_lhs) == sp.Mul:
                 for name, var in self.variables.items():
-                    if self.domains[name].kind == DomainType.NUMERIC:
+                    if self.domains[name].kind == DomainType.NUMERICAL:
                         #* (Var x const1) >= Var
                         yield expr_lhs >= var
                         #* (Var x const1) <= Var

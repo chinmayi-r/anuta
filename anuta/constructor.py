@@ -94,7 +94,7 @@ class Cicids2017(Constructor):
         domains = {}
         for name in self.df.columns:
             if name not in self.categorical:
-                domains[name] = Domain(DomainType.NUMERIC, 
+                domains[name] = Domain(DomainType.NUMERICAL, 
                                        Bounds(self.df[name].min().item(), 
                                               self.df[name].max().item()), 
                                        None)
@@ -215,7 +215,7 @@ class Netflix(Constructor):
         domains = {}
         for name in self.df.columns:
             if name not in self.categorical:
-                domains[name] = Domain(DomainType.NUMERIC, 
+                domains[name] = Domain(DomainType.NUMERICAL, 
                                        Bounds(self.df[name].min().item(), 
                                               self.df[name].max().item()), 
                                        None)
@@ -297,7 +297,7 @@ class Cidds001(Constructor):
         domains = {}
         for name in self.df.columns:
             if name not in self.categorical:
-                domains[name] = Domain(DomainType.NUMERIC, 
+                domains[name] = Domain(DomainType.NUMERICAL, 
                                       Bounds(self.df[name].min().item(), 
                                              self.df[name].max().item()), 
                                       None)
