@@ -7,6 +7,8 @@ from tqdm import tqdm
 from time import perf_counter
 import pickle
 from pathlib import Path
+import z3
+from IPython.display import display
 
 from anuta.utils import *
 from anuta.known import *
@@ -42,7 +44,8 @@ class Constraint(object):
 class Theory(object):
     def __init__(self, path_to_constraints: str):
         self.constraints = Theory.load_constraints(path_to_constraints)
-        self._thoery = Theory.create(self.constraints, path_to_constraints)
+        # self._theory = Theory.create(self.constraints, path_to_constraints)
+        self._theory = Theory.z3create(self.constraints)
     
     def proves(self, query: str, verbose: bool=True) -> bool:
         """Checks the existence of a proof of query from theory (syntactic consequence).
@@ -86,7 +89,7 @@ class Theory(object):
                         #* Proof by Resolution rule of Inference: 
                         #*  To determine whether a set of sentences KB logically entails a sentence q, 
                         #*  rewrite KB\/{~q} in clausal form and try to derive the empty clause.
-                        sp.And(self._thoery, ~q)
+                        sp.And(self._theory, ~q)
                         #^ Same as below:
                         # sp.Not(sp.Or(~self._model, q))
                     # )
@@ -104,6 +107,43 @@ class Theory(object):
             pprint("Entailed by theory:", entailed, sep=' ')
             pprint(f"Inference time:\t{end-start:.2f} s")
         return entailed
+    
+    def z3proves(self, query, verbose=True):
+        """Try to prove the given claim."""
+        query = eval(str(sp.sympify(query)), z3evalmap)
+        if verbose: display(query)
+            
+        s = z3.Solver()
+        s.add(z3.And(
+            self._theory,
+            z3.Not(query)
+        ))
+        proved = False
+        r = s.check()
+        if r == z3.unsat:
+            proved = True
+        elif r == z3.unknown:
+            if verbose:
+                print("Failed to prove")
+                print(s.model())
+        else:
+            if verbose:
+                print("Counterexample:")
+                pprint(s.model())
+        if verbose: pprint(proved)
+        return proved
+        
+        
+    @staticmethod
+    def z3create(constraints: List[sp.Expr]):
+        evalmap = z3evalmap
+        z3rules = [
+            eval(str(sp.sympify(rule)), evalmap) 
+            for rule in constraints
+        ]
+        z3clauses = [z3.simplify(rule) for rule in z3rules]
+        z3theory = z3.And(z3clauses)
+        return z3theory
     
     @staticmethod
     def create(
@@ -258,6 +298,8 @@ class Theory(object):
                 value = cidds_flags_conversion.inverse[varval]
             elif 'Proto' in varname:
                 value = cidds_proto_conversion.inverse[varval]
+            elif 'Port' in varname:
+                value = cidds_port_conversion.inverse[varval]
             else:
                 value = varval
             return value

@@ -19,4 +19,7 @@ bidict==0.23.1
 ml_collections==1.0.0
 networkx==3.4.2
 z3-solver==4.14.1.0
+h2o==3.46.0.7
+xgboost==3.0.2
+mlxtend==0.23.4
 ipython

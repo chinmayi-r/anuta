@@ -16,6 +16,8 @@ import warnings
 warnings.filterwarnings("ignore")
 
 from anuta.constructor import Constructor, Millisampler, Cidds001, Netflix, Cicids2017
+from anuta.tree import EntropyTreeLearner
+from anuta.association import AsscoriationRuleLearner
 from anuta.theory import Theory
 from anuta.miner import miner_versionspace, miner_valiant, validator
 from anuta.utils import log
@@ -23,7 +25,16 @@ from anuta.cli import FLAGS
 
     
 def main(constructor: Constructor, refconstructor: Constructor, limit: int):
-    if FLAGS.baseline:
+    if FLAGS.tree:
+        learner = EntropyTreeLearner(constructor, limit=limit)
+        log.info("Learning constraints using decision tree...")
+        learner.learn()
+    elif FLAGS.assoc:
+        learner = AsscoriationRuleLearner(
+            constructor, algorithm=FLAGS.aalgo, limit=limit)
+        log.info("Learning constraints using association rules...")
+        learner.learn()
+    elif FLAGS.baseline:
         miner_valiant(constructor, limit)
     else:
         miner_versionspace(constructor, refconstructor, limit)
@@ -57,18 +68,20 @@ if __name__ == '__main__':
     if FLAGS.learn:
         refdata = FLAGS.ref
         refconstructor = None
-        if not refdata:
-            if dataset == 'cidds':
-                refdata = "data/cidds_wk4_all.csv"
-                refconstructor = Cidds001(refdata)
-            elif dataset == 'netflix':
-                refdata = "data/netflix.csv"
-                refconstructor = Netflix(refdata)
-            elif dataset == 'cicids':
-                refdata = "data/cicids_friday_normal.csv"
-                refconstructor = Cicids2017(refdata)
-        else:
-            refconstructor = Cidds001(refdata) if dataset == 'cidds' else Netflix(refdata)
+        if not FLAGS.tree and not FLAGS.assoc:
+            if not refdata:
+                if dataset == 'cidds':
+                    refdata = "data/cidds_wk4_all.csv"
+                    refconstructor = Cidds001(refdata)
+                elif dataset == 'netflix':
+                    refdata = "data/netflix.csv"
+                    refconstructor = Netflix(refdata)
+                elif dataset == 'cicids':
+                    refdata = "data/cicids_friday_normal.csv"
+                    refconstructor = Cicids2017(refdata)
+            else:
+                refconstructor = Cidds001(refdata) \
+                    if dataset == 'cidds' else Netflix(refdata)
             
         log.info(f"Learning from {limit} examples in {FLAGS.data}")
         log.info(f"Domain counting enabled: {FLAGS.config.DOMAIN_COUNTING}")

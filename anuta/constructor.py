@@ -292,11 +292,13 @@ class Cidds001(Constructor):
         self.df['Proto'] = self.df['Proto'].apply(cidds_proto_map)
         self.df['SrcIpAddr'] = self.df['SrcIpAddr'].apply(cidds_ip_map)
         self.df['DstIpAddr'] = self.df['DstIpAddr'].apply(cidds_ip_map)
-        self.categorical = cidds_categorical
+        self.df['SrcPt'] = self.df['SrcPt'].apply(cidds_port_map)
+        self.df['DstPt'] = self.df['DstPt'].apply(cidds_port_map)
+        self.categoricals = cidds_categoricals
         
         domains = {}
         for name in self.df.columns:
-            if name not in self.categorical:
+            if name not in self.categoricals:
                 domains[name] = Domain(DomainType.NUMERICAL, 
                                       Bounds(self.df[name].min().item(), 
                                              self.df[name].max().item()), 
@@ -351,7 +353,7 @@ class Cidds001(Constructor):
         ) -> tuple[dict[str, dict[str, np.ndarray]], dict[str, DomainCounter]]:
         indexset = {}
         #^ dict[var: dict[val: array(indices)]] // Var -> {Distinct value -> indices}
-        for cat in self.categorical:
+        for cat in self.categoricals:
             indices = df.groupby(by=cat).indices
             filtered_indices = {}
             if cat in self.constants:

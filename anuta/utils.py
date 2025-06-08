@@ -5,6 +5,8 @@ import pandas as pd
 from collections import defaultdict
 import z3
 
+from anuta.known import *
+
 true = sp.logic.true
 false = sp.logic.false
 
@@ -26,7 +28,13 @@ def ne_expr(a, b): return a != b
 def and_expr(*args): return z3.And(*args)
 def or_expr(*args): return z3.Or(*args)
 def implies_expr(a, b): return z3.Implies(a, b)
-z3evalmap = {'Eq': eq_expr, 'Ne': ne_expr, 'And': and_expr, 'Or': or_expr, 'Implies': implies_expr}
+def equiv_expr(a, b): return a == b
+z3evalmap = {'Eq': eq_expr, 'Ne': ne_expr, 'And': and_expr, 'Or': or_expr, 'Implies': implies_expr, 'Equivalent': equiv_expr}
+for varname in cidds_categoricals:
+    z3evalmap[varname] = z3.Int(varname)
+for varname in cidds_numericals:
+    z3evalmap[varname] = z3.Real(varname)
+#TODO: Add vars from other datasets
 
 def transform_consequent(expression):
     """

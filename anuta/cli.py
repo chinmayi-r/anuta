@@ -15,11 +15,14 @@ python anuta -validate -dataset=netflix -data=data/syn/netflix_rtf_syn.csv -limi
 '''
 FLAGS = flags.FLAGS
 
-#* Commands
+#* Commands (avoid using subcommands for simplicity)
 flags.DEFINE_boolean("learn", False, "Learn constraints from a dataset")
 flags.DEFINE_boolean("validate", False, "Validate a dataset using a learned theory")
 
 #* Configs
+flags.DEFINE_boolean("tree", False, "Learn constraints using a decision tree learner")
+flags.DEFINE_boolean("assoc", False, "Learn constraints using an association rule learner")
+flags.DEFINE_enum("aalgo", 'fpgrowth', ['apriori', 'fpgrowth', 'hmine'], "Association rule learning algorithm to use")
 flags.DEFINE_string("limit", None, "Limit on the number of examples to learn from")
 #TODO: Generalize `dataset` to netflow and pcap.
 flags.DEFINE_enum("dataset", None, ['cidds', 'netflix', 'cicids'], "Name of the dataset to learn from")

@@ -3,6 +3,13 @@ data/Millisampler-data
 
 *.json
 /data/*.csv
+*.rule
+data/
+results/
+**.npy
+**.pkl
+*.pl
+*.csv
 
 .ipynb_checkpoints
 */.ipynb_checkpoints/*
@@ -182,8 +189,6 @@ poetry.toml
 
 # LSP config files
 pyrightconfig.json
-*.rule
-data/syn/
 
 ### venv ###
 # Virtualenv

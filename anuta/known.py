@@ -1,6 +1,26 @@
 from bidict import bidict
 
 
+known_ports = [
+    20,   # FTP Data Transfer
+    21,   # FTP Control
+    22,   # SSH
+    23,   # Telnet
+    25,   # SMTP
+    53,   # DNS
+    67,   # DHCP Server
+    68,   # DHCP Client
+    69,   # TFTP
+    80,   # HTTP
+    110,  # POP3
+    143,  # IMAP
+    443,  # HTTPS
+    514,  # Syslog
+    993,  # IMAPS
+    995,  # POP3S
+    8080 # Alternative HTTP
+]
+UNKNOWN_PORT = 60_000  # Default value for unknown ports
 #******************** Netflix data Domain Knowledge begins ********************
 netflix_flags = ['SYN', 'ACK-SYN', 'ACK', 'ACK-PSH', 'ACK-FIN']
 netflix_seqnum_increaments = [1]
@@ -58,14 +78,14 @@ popular_ports = [
 
 #******************** CIDDS-001 Domain Knowledge begins ********************
 #? Should port be a categorical variable? Sometimes we need range values (i.e., application and dynamic ports).
-cidds_categorical = ['Flags', 'Proto', 'SrcIpAddr', 'DstIpAddr'] + ['SrcPt', 'DstPt']
-cidds_numerical = ['Packets', 'Bytes', 'Flows', 'Duration']
+cidds_categoricals = ['Flags', 'Proto', 'SrcIpAddr', 'DstIpAddr'] + ['SrcPt', 'DstPt']
+cidds_numericals = ['Packets', 'Bytes', 'Flows', 'Duration']
 cidds_ips = ['private_p2p', 'private_broadcast', 'any', 'public_p2p', 'dns']
 cidds_ports = [0, 3, 8, 11, 22, 25, 
             #    23, #* Telnet
             #    8000, #* Seafile Server
-               53, 67, 68, 80, 123, 137, 138, 443, 8080]
-cidds_ints = ['Packets', 'Bytes', 'Flows'] + cidds_categorical
+               53, 67, 68, 80, 123, 137, 138, 443, 993, 8080]
+cidds_ints = ['Packets', 'Bytes', 'Flows'] + cidds_categoricals
 cidds_reals = ['Duration']
 
 #* Map strings to integers
@@ -74,6 +94,8 @@ cidds_flags_conversion = bidict({flag: i for i, flag in enumerate(['noflags', 'f
 #TODO: Change the mapping to standard NetFlow codes: 
 # https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml
 cidds_proto_conversion = bidict({proto: i for i, proto in enumerate(['TCP', 'UDP', 'ICMP', 'IGMP'])})
+cidds_port_conversion = bidict({port: port for port in cidds_ports + known_ports})
+cidds_port_conversion[UNKNOWN_PORT] = 'UNK' #* Add the DONTCARE_PORT to the port conversion
 cidds_conversions = {
     'ip': cidds_ip_conversion,
     'flags': cidds_flags_conversion,
@@ -86,6 +108,12 @@ cidds_constants = {
     'bytes': [1],
 }
 
+def cidds_port_map(port):
+    if port not in set(cidds_ports) | set(known_ports):
+        return UNKNOWN_PORT
+    else:
+        return port
+    
 def cidds_proto_map(proto: str):
 	return cidds_proto_conversion[proto]
 
@@ -103,7 +131,7 @@ def cidds_ip_map(ip: str):
         new_ip += 'p2p'
     
     if ip == '0.0.0.0':
-        new_ip = 'private_any'
+        new_ip = 'any'
     elif ip == '255.255.255.255':
         new_ip = 'private_broadcast'
     elif ip == 'DNS':
