@@ -6,6 +6,8 @@ from typing import *
 import itertools
 from collections import defaultdict
 from time import perf_counter
+import numpy as np
+import pandas as pd
 from tqdm import tqdm
 import sympy as sp
 from rich import print as pprint
@@ -46,11 +48,11 @@ class EntropyTreeLearner:
             var for var in self.examples.columns 
             # if var in self.categoricals
         ]
-        self.target_to_features = defaultdict(list)
+        self.featuregroups = defaultdict(list)
         for target in variables:
             features = [v for v in variables if v != target]
             for n in range(1, len(features)+1):
-                self.target_to_features[target] += itertools.combinations(features, n)
+                self.featuregroups[target] += itertools.combinations(features, n)
         
         self.model_configs = {}
         self.model_configs['classification'] = dict(
@@ -93,13 +95,13 @@ class EntropyTreeLearner:
         pprint(self.dtypes)
     
     def learn(self):
-        total_trees = len(self.target_to_features) * \
-            len(self.target_to_features[list(self.target_to_features)[0]])
+        total_trees = len(self.featuregroups) * \
+            len(self.featuregroups[list(self.featuregroups)[0]])
         log.info(f"Learning {total_trees} trees from {len(self.examples)} examples.")
         
         start = perf_counter()
         treeid = 1
-        for target, feature_group in self.target_to_features.items():
+        for target, feature_group in self.featuregroups.items():
             log.info(f"Learning trees for {target} with {len(feature_group)} feature groups.")
             if target in self.categoricals:
                 params = self.model_configs['classification']
@@ -112,7 +114,7 @@ class EntropyTreeLearner:
                 dtree = H2ORandomForestEstimator(**params)
                 dtree.train(x=list(features), y=target, training_frame=self.examples)  
                 self.trees[target].append(dtree)
-                print(f"... Trained {treeid}/{total_trees} trees ({target=}).", end='\r')
+                print(f"... Trained {treeid}/{total_trees} ({treeid/total_trees:.1%}) trees ({target=}).", end='\r')
                 treeid += 1
         end = perf_counter()
         log.info(f"Training {total_trees} trees took {end - start:.2f} seconds.")
@@ -276,7 +278,7 @@ class EntropyTreeLearner:
                     rules.add(rule)
                 total_rules += len(rules)
                 learned_rules |= rules
-            log.info(f"Extracted {len(learned_rules)} rules from trees of {target}.")
+            log.info(f"Extracted {len(rules)} rules from trees of {target}.")
         log.info(f"Total rules extracted: {len(learned_rules)}")
         return learned_rules
     
@@ -287,7 +289,7 @@ class EntropyTreeLearner:
             for treeidx, dtree in enumerate(tqdm(
                 trees, desc=f"Extracting paths from trees of {target}"
             )):
-                # print(f"Features: {self.target_to_features[target][treeidx]}")
+                # print(f"Features: {self.featuregroups[target][treeidx]}")
                 paths = self.extract_tree_paths(dtree, target)
                 #* Paths could be empty `{}`, but keep it 
                 #*  to match the indexing of `self.trees` to `all_tree_paths`
@@ -360,3 +362,426 @@ class EntropyTreeLearner:
         # print(logits)
         return treepaths
  
+
+class XgboostTreeLearner:
+    """Tree learner based on XGBoost."""
+    def __init__(self, constructor: Constructor, limit=None):
+        if limit and limit < constructor.df.shape[0]:
+            log.info(f"Limiting dataset to {limit} examples.")
+            constructor.df = constructor.df.sample(n=limit, random_state=42)
+            
+        self.dataset = constructor.label
+        match constructor.label:
+            case 'cidds':
+                constructor: Cidds001 = constructor
+                self.examples = constructor.df.copy()
+                self.examples[constructor.categoricals] = \
+                    self.examples[constructor.categoricals].astype('category')
+                self.categoricals = constructor.categoricals
+            case _:
+                raise ValueError(f"Unsupported constructor: {constructor.label}")
+        
+        variables: List[str] = [
+            var for var in self.examples.columns
+            # if var in self.categoricals
+        ] 
+        self.featuregroups = defaultdict(list)
+        for target in variables:
+            features = [v for v in variables if v != target]
+            for n in range(1, len(features)+1):
+                self.featuregroups[target] += itertools.combinations(features, n)
+        
+        common_config = dict(
+                min_child_weight=0,    # small → allows fine splits
+                gamma=0,               # allow all positive-gain splits
+                grow_policy='depthwise',  # ensures full-depth growth
+                # # tree_method='exact',   # for most deterministic behavior
+                # # subsample=1,
+                # # colsample_bytree=1,
+                learning_rate=1,        # set high so pure leaves dominate logits
+                n_estimators=1, 
+                reg_alpha=0,   # L1 regularization term on weights
+                reg_lambda=1,   # L2 regularization term on weights
+                enable_categorical=True)
+        self.model_configs = {}
+        self.model_configs['classification'] = dict(
+            objective = 'multi:softprob',
+            max_depth=len(variables), # high enough to split until pure
+            **common_config,
+        )
+        self.model_configs['regression'] = dict(
+            objective = 'reg:squarederror',
+            max_depth=len(variables)//2, #TODO: To be tuned
+            **common_config,
+        )
+                
+        #TODO: Unify `Domain`
+        self.domains = {}
+        for varname in variables:
+            if varname in self.categoricals: 
+                self.domains[varname] = sorted(
+                    [n.item() for n in constructor.df[varname].unique()])
+            else:
+                self.domains[varname] = (
+                    self.examples[varname].min().item(), 
+                    self.examples[varname].max().item(),
+                )
+        self.dtypes = {}
+        #TODO: Unify `DomainType`
+        #* dTypes: {'int', 'real', 'enum'(categorical)}
+        for varname, dtype in self.examples.dtypes.items():
+            if dtype.name == 'category':
+                self.dtypes[varname] = 'enum'
+            elif dtype.name in ['int64', 'int32']:
+                self.dtypes[varname] = 'int'
+            elif dtype.name in ['float64', 'float32']:
+                self.dtypes[varname] = 'real'
+            else:
+                raise ValueError(f"Unsupported data type {dtype} for variable {varname}.")
+        self.trees: Dict[str, List[XGBClassifier|XGBRegressor]] = defaultdict(list)
+        self.label_encoders: Dict[str, LabelEncoder] = {}
+        self.learned_rules: Set[str] = set()
+        pprint(self.domains)
+        pprint(self.dtypes)
+    
+    def learn(self):
+        total_trees = len(self.featuregroups) * \
+            len(self.featuregroups[list(self.featuregroups)[0]])
+        log.info(f"Learning {total_trees} trees from {len(self.examples)} examples.")
+        
+        start = perf_counter()
+        treeid = 1
+        for target, feature_group in self.featuregroups.items():
+            log.info(f"Learning trees for {target} with {len(feature_group)} feature groups.")
+            modelcls = None
+            if target in self.categoricals:
+                params = self.model_configs['classification']
+                modelcls = XGBClassifier
+            else:
+                params = self.model_configs['regression']
+                modelcls = XGBRegressor
+            num_class = len(self.domains[target]) if target in self.categoricals else 1
+            
+            y = self.examples[target]
+            if target in self.categoricals:
+                encoder = LabelEncoder()
+                y = encoder.fit_transform(y)
+                self.label_encoders[target] = encoder
+            
+            for i, features in enumerate(feature_group):
+                model = modelcls(num_class=num_class, **params)
+                X = self.examples[list(features)]
+                model.fit(X, y)
+                self.trees[target].append(model)
+                print(f"... Trained {treeid}/{total_trees} ({treeid/total_trees:.1%}) trees ({target=}).", end='\r')
+                treeid += 1
+        end = perf_counter()
+        log.info(f"Training {total_trees} trees took {end - start:.2f} seconds.")
+        
+        start = perf_counter()
+        self.learned_rules = self.extract_rules_from_pathconditions()
+        end = perf_counter()
+        log.info(f"Learned {len(self.learned_rules)} rules from {total_trees} trees.")
+        log.info(f"Extracting rules took {end - start:.2f} seconds.")
+        
+        assumptions = set()
+        for varname, domain in self.domains.items():
+            if varname in self.categoricals:
+                assumptions.add(f"{varname} >= 0")
+                assumptions.add(f"{varname} <= {max(domain)}")
+            else:
+                assumptions.add(f"{varname} >= {domain[0]}")
+                assumptions.add(f"{varname} <= {domain[1]}")
+        rules = self.learned_rules | assumptions
+        sprules = [sp.sympify(rule) for rule in rules]
+        Theory.save_constraints(sprules, f'xgbrules_{self.dataset}.pl')
+        
+        return
+    
+    def extract_rules_from_pathconditions(self) -> Set[str]:
+        learned_rules = set()
+        for target, pathconditions in self.extract_conditions_from_treepaths().items():
+            targetvar = target
+            rules = set()
+            for targetcls, conditions in pathconditions.items():
+            # tqdm(
+            #     pathconditions.items(), total=len(pathconditions),
+            #     desc=f"Extracting rules from {target} conditions"
+            # ):
+                for record in conditions:
+                    var_conditions = {}
+                    for condition in record['conditions']:
+                        varname, op, varval = condition.split('_')
+                        varval = eval(varval)
+                        if varname not in var_conditions:
+                            var_conditions[varname] = defaultdict(None)
+
+                        if op in ['∈', '∉']:
+                            values = var_conditions[varname].get(op, set())
+                            var_conditions[varname][op] = values | set(varval)
+                        elif op == '≥':
+                            value = var_conditions[varname].get(op, float('+inf'))
+                            var_conditions[varname][op] = min(value, varval)
+                        elif op == '<':
+                            value = var_conditions[varname].get(op, float('-inf'))
+                            var_conditions[varname][op] = max(value, varval)
+
+                    predicates = []
+                    for varname, merged_conditions in var_conditions.items():
+                        operators = merged_conditions.keys()
+                        if set(['∈', '∉']) & operators:
+                            #* Categorical var
+                            assert not set(['<', '≥']) & operators, f"{varname} has mixed {merged_conditions=}"
+                            _invals = merged_conditions.get('∈', set())
+                            _outvals = merged_conditions.get('∉', set())
+                
+                            invals = _invals - _outvals
+                            outvals = _outvals - _invals
+                            domain = set(self.domains[varname])
+
+                            #* Use the most succinct representation
+                            if invals:
+                                diffvals = domain - invals
+                                if len(diffvals) < len(invals):
+                                    outvals |= diffvals
+                                    invals = set()
+                            if outvals:
+                                diffvals = domain - outvals
+                                if len(diffvals) < len(outvals):
+                                    invals |= diffvals
+                                    outvals = set()
+
+                            predicate = ''
+                            for val in invals:
+                                predicate += f"Eq({varname}, {val})|"
+                            predicate = predicate[:-1]
+                            if len(invals) > 1:
+                                predicate = '( ' + predicate + ' )'
+                            if predicate:
+                                predicates.append(predicate)
+
+                            for val in outvals:
+                                predicates.append(f"Ne({varname}, {val})")
+                        else:
+                            assert set(['<', '≥']) & operators, f"{varname} has no recognizd {merged_conditions=}"
+                            #TODO: Force integer typing.
+                            valmin = merged_conditions.get('≥', float('-inf'))
+                            valmax = merged_conditions.get('<', float('+inf'))
+                            if valmin >= valmax:
+                                #TODO: Accumulate logits to decide which condition to take. Discard all together for now.
+                                print(f"[Conflicting condition!!!]: {varname=}:{merged_conditions}")
+                            else:
+                                if valmin > float('-inf'):
+                                    if self.dtypes[varname] == 'int':
+                                        valmin = int(valmin)
+                                    predicates.append(f"({varname} > {valmin})")
+                                if valmax < float('+inf'):
+                                    if self.dtypes[varname] == 'int':
+                                        valmax = int(valmax)
+                                    predicates.append(f"({varname} <= {valmax})")
+                    
+                    if predicates:
+                        premise = ' & '.join(predicates)
+                        if targetvar in self.categoricals:
+                            conclusion = f"Eq({targetvar}, {targetcls})"
+                        else:
+                            targetmin = record['target_range']['min']
+                            targetmax = record['target_range']['max']
+                            if self.dtypes[targetvar] == 'int':
+                                targetmin, targetmax = int(targetmin), int(targetmax)
+                            conclusion = f"(({targetvar}>={targetmin}) & ({targetvar}<={targetmax}))"
+                        rule = f"({premise}) >> {conclusion}"
+                        rules.add(rule)
+            learned_rules |= rules
+            log.info(f"Extracted {len(rules)} rules from trees of {target}.")
+        log.info(f"Total rules extracted: {len(learned_rules)}")
+        return learned_rules
+
+    def extract_conditions_from_treepaths(self) -> Set[str]:
+        #TODO: Move to config
+        MIN_GAIN = 0
+        MIN_LOGIT = 0
+        #* {target: {label1: [conditions1, conditions2, ...], label2: [...]}}
+        all_pathconditions = {}
+        for target, all_treepaths in self.extract_paths_from_all_trees().items():
+            all_pathconditions[target] = defaultdict(list)
+            encoder = self.label_encoders.get(target, None)
+            for treeidx, paths in enumerate(all_treepaths):
+                xgbtree: XGBClassifier|XGBRegressor = self.trees[target][treeidx]
+                n_classes = getattr(xgbtree, 'n_classes_', 1)
+                useless_splits = XgboostTreeLearner.get_useless_splits(xgbtree)
+                label_map = dict(zip(encoder.transform(encoder.classes_), encoder.classes_)) \
+                    if encoder else {}
+                
+                leafranges = {}  
+                if not encoder:
+                    #* Compute leaf ranges for regression trees
+                    features = xgbtree.get_booster().feature_names
+                    X = self.examples.copy()
+                    #! Deal with bug in XGBoost3.0.2 where categoricals are not handled correctly at inference
+                    X[self.categoricals] = X[self.categoricals].astype(int)
+                    X = X[features]
+                    leaves = xgbtree.apply(X)
+                    # Flatten since we have only one tree
+                    leaf_indices = leaves.flatten()
+                    # Combine with target values
+                    df = pd.DataFrame({'leaf': leaf_indices, 'target': self.examples[target]})
+                    # Group by leaf and get min/max
+                    leafrangedf = df.groupby('leaf')['target'].agg(['min', 'max'])
+                    leafrangedf.reset_index(inplace=True)
+                    for i, row in leafrangedf.iterrows():
+                        leafranges[int(row['leaf'])] = {
+                            'min': row['min'],
+                            'max': row['max'],
+                        }
+
+                #* Group paths by target class
+                for path in paths:
+                    if path['Logit'] <= MIN_LOGIT: continue
+
+                    pathcondition = {
+                        'pathid': path['LeafID'],
+                        'logit': path['Logit'],
+                        'target_range': None,  # For regression trees
+                    }
+                    conditions = []
+                    for split in path['Path']:
+                        if split['Gain'] <= MIN_GAIN: continue
+                        if split['NodeID'] in useless_splits: continue
+
+                        varname = split['Feature']
+                        if split['Split'] is not None:
+                            op = '<' if split['Direction']=='Yes' else '≥'
+                            condition = f"{varname}_{op}_{split['Split']}"
+                        else:
+                            assert split['Category'] is not None
+                            op = '∈' if split['Direction'] == 'Yes' else '∉'
+                            categories = [
+                                #* Index into the original category
+                                self.examples[varname].astype('category').cat.categories[int(v)] 
+                                for v in split['Category']
+                            ]
+                            condition = f"{varname}_{op}_{categories}"
+                        conditions.append(condition)
+
+                    if conditions:
+                        pathcondition['conditions'] = conditions
+                        if n_classes > 1:
+                            target_cls = path['Tree'] % n_classes
+                            label = label_map[target_cls]
+                            all_pathconditions[target][label].append(pathcondition)
+                        else:
+                            #* Regression tree
+                            leafid = int(path['LeafID'].split('-')[-1])
+                            if leafid in leafranges:
+                                pathcondition['target_range'] = leafranges[leafid]
+                                all_pathconditions[target][leafid].append(pathcondition)
+        return all_pathconditions
+                        
+    @staticmethod
+    def get_useless_splits(model: XGBClassifier|XGBRegressor) -> Set[int]:
+        """Find the split whose two leaves have the same logits."""
+        tree_df = model.get_booster().trees_to_dataframe()
+        useless_splits = []
+        for _, node in tree_df[tree_df['Feature'] != 'Leaf'].iterrows():
+            yes_leaf = tree_df[(tree_df['Tree'] == node['Tree']) & (tree_df['ID'] == node['Yes'])]
+            no_leaf = tree_df[(tree_df['Tree'] == node['Tree']) & (tree_df['ID'] == node['No'])]
+        
+            if not yes_leaf.empty and not no_leaf.empty:
+                if yes_leaf.iloc[0]['Gain'] == no_leaf.iloc[0]['Gain']:
+                    useless_splits.append( node['ID'] )
+                    # useless_splits.append((node['Tree'], node['ID'], node['Feature']))
+        return useless_splits
+    
+    def extract_paths_from_all_trees(self):
+        """Extract path conditions from all trees."""
+        all_tree_paths = defaultdict(list)
+        for target, trees in self.trees.items():
+            for treeidx, model in enumerate(tqdm(
+                trees, desc=f"Extracting paths from trees of {target}"
+            )):
+                paths = self.extract_tree_paths(model)
+                #* Paths could be empty `{}`, but keep it 
+                #*  to match the indexing of `self.trees` to `all_tree_paths`
+                all_tree_paths[target].append(paths)
+
+        #* {target: [{tree1_paths}, {tree2_paths}, ...]}
+        return all_tree_paths
+    
+    def extract_tree_paths(self, model: XGBClassifier|XGBRegressor):
+        """
+        Extracts decision paths from the last N trees in an XGBoost model, including categorical splits.
+        N is the number of classes for classifiers, and 1 for regressors.
+
+        Parameters:
+        - model: Trained XGBoost model (e.g., XGBClassifier or XGBRegressor)
+
+        Returns:
+        - List of dictionaries, each representing a decision path from root to leaf.
+        """
+        booster = model.get_booster()
+        tree_df = booster.trees_to_dataframe()
+
+        # Preprocess node mapping per tree
+        tree_group = tree_df.groupby('Tree')
+        id_to_row_by_tree = {
+            tree_idx: group.set_index('ID').to_dict(orient='index')
+            for tree_idx, group in tree_group
+        }
+
+        leaf_nodes = tree_df[tree_df['Feature'] == 'Leaf']
+        paths = []
+
+        for _, leaf in leaf_nodes.iterrows():
+            tree_index = leaf['Tree']
+            leaf_id = leaf['ID']
+            leaf_value = leaf['Gain']  # Leaf value
+
+            id_to_row = id_to_row_by_tree[tree_index]
+            path = []
+            current_id = leaf_id
+            visited = set()
+
+            while True:
+                if current_id in visited:
+                    print(f"⚠️ Infinite loop detected at node {current_id} in tree {tree_index}")
+                    break
+                visited.add(current_id)
+
+                # Find parent node
+                parent_id = next(
+                    (pid for pid, row in id_to_row.items()
+                    if row.get('Yes') == current_id or row.get('No') == current_id),
+                    None
+                )
+
+                if parent_id is None:
+                    break  # Reached root
+
+                parent = id_to_row[parent_id]
+                direction = 'Yes' if parent['Yes'] == current_id else 'No'
+
+                condition = {
+                    'Tree': tree_index,
+                    'NodeID': parent_id,
+                    'Feature': parent['Feature'],
+                    'Split': parent['Split'] if not np.isnan(parent['Split']) else None,
+                    'Gain': parent['Gain'],
+                    'Category': parent.get('Category'),
+                    'Direction': direction
+                }
+                path.append(condition)
+                current_id = parent_id
+
+            path.reverse()
+
+            paths.append({
+                'Tree': tree_index,
+                'LeafID': leaf_id,
+                'Logit': leaf_value,
+                'Path': path
+            })
+
+        return paths
+    
+    

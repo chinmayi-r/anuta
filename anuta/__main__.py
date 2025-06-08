@@ -16,7 +16,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 from anuta.constructor import Constructor, Millisampler, Cidds001, Netflix, Cicids2017
-from anuta.tree import EntropyTreeLearner
+from anuta.tree import EntropyTreeLearner, XgboostTreeLearner
 from anuta.association import AsscoriationRuleLearner
 from anuta.theory import Theory
 from anuta.miner import miner_versionspace, miner_valiant, validator
@@ -25,9 +25,13 @@ from anuta.cli import FLAGS
 
     
 def main(constructor: Constructor, refconstructor: Constructor, limit: int):
-    if FLAGS.tree:
+    if FLAGS.dtree:
         learner = EntropyTreeLearner(constructor, limit=limit)
         log.info("Learning constraints using decision tree...")
+        learner.learn()
+    elif FLAGS.xgb:
+        learner = XgboostTreeLearner(constructor, limit=limit)
+        log.info("Learning constraints using XGBoost...")
         learner.learn()
     elif FLAGS.assoc:
         learner = AsscoriationRuleLearner(
@@ -57,9 +61,9 @@ if __name__ == '__main__':
     if FLAGS.limit:
         limit = FLAGS.limit
         limit = int(limit[:-1]) * 1024 if 'k' in limit else int(limit)
-        assert limit <= constructor.df.size, f"Dataset size {constructor.df.size} < {limit=}"
+        assert limit <= constructor.df.shape[0], f"Dataset size {constructor.df.size} < {limit=}"
     else:
-        limit = constructor.df.size
+        limit = constructor.df.shape[0]
     
     #* Disable domain counting for baseline method.
     if FLAGS.baseline or not FLAGS.dc:
@@ -68,7 +72,7 @@ if __name__ == '__main__':
     if FLAGS.learn:
         refdata = FLAGS.ref
         refconstructor = None
-        if not FLAGS.tree and not FLAGS.assoc:
+        if not FLAGS.dtree and not FLAGS.assoc and not FLAGS.xgb:
             if not refdata:
                 if dataset == 'cidds':
                     refdata = "data/cidds_wk4_all.csv"

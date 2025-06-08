@@ -25,6 +25,7 @@ def theory() -> Theory:
     modelpath = 'treerules_cidds_cat.pl'
     modelpath = 'treerules_cidds.pl'
     modelpath = 'arules_cidds.pl'
+    modelpath = 'xgbrules_cidds.pl'
     # modelpath = 'rules/cidds/new/learned_cidds_8192_filtered.pl'
     # modelpath = 'rules/cidds/new/learned_cidds_8192_checked.pl'
     return Theory(modelpath)
