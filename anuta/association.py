@@ -74,7 +74,7 @@ class AsscoriationRuleLearner:
         
         rules = set(self.learned_rules) | assumptions
         sprules = [sp.sympify(rule) for rule in rules]
-        Theory.save_constraints(sprules, f'arules_{self.dataset}.pl')
+        Theory.save_constraints(sprules, f'arules_{self.algorithm}_{self.dataset}.pl')
         
         return
     

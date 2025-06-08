@@ -2,9 +2,6 @@
 
 set -e
 
-echo "🔄 Updating package list..."
-sudo apt update
-
 echo "📦 Installing default JDK (Java Development Kit)..."
 sudo apt install -y default-jdk
 
@@ -24,5 +21,5 @@ sudo sed -i '/^JAVA_HOME=/d' /etc/environment
 # Append new JAVA_HOME
 echo "JAVA_HOME=\"$JAVA_PATH\"" | sudo tee -a /etc/environment
 
-echo "♻️ You must log out and back in (or reboot) for JAVA_HOME to take effect."
+# echo "♻️ You must log out and back in (or reboot) for JAVA_HOME to take effect."
 echo "✅ Java setup completed successfully!"
