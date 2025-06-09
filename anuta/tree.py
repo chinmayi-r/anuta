@@ -29,6 +29,9 @@ class EntropyTreeLearner:
         if limit and limit < constructor.df.shape[0]:
             log.info(f"Limiting dataset to {limit} examples.")
             constructor.df = constructor.df.sample(n=limit, random_state=42)
+            self.num_examples = limit
+        else:
+            self.num_examples = constructor.df.shape[0]
             
         self.dataset = constructor.label
         match constructor.label:
@@ -136,7 +139,7 @@ class EntropyTreeLearner:
         
         rules = self.learned_rules | assumptions
         sprules = [sp.sympify(rule) for rule in rules]
-        Theory.save_constraints(sprules, f'treerules_{self.dataset}.pl')
+        Theory.save_constraints(sprules, f'dtree_{self.dataset}_{self.num_examples}.pl')
         
         #TODO: Interpret rules with domains to enable `X [opt] s•Y` rules.
         return
@@ -149,7 +152,7 @@ class EntropyTreeLearner:
                 if not pathconditions: 
                     #* No valid paths found in this tree
                     continue 
-                 
+                
                 if target in self.categoricals:
                     ruleset = defaultdict(set)
                 else:
@@ -369,6 +372,9 @@ class XgboostTreeLearner:
         if limit and limit < constructor.df.shape[0]:
             log.info(f"Limiting dataset to {limit} examples.")
             constructor.df = constructor.df.sample(n=limit, random_state=42)
+            self.num_examples = limit
+        else:
+            self.num_examples = constructor.df.shape[0]
             
         self.dataset = constructor.label
         match constructor.label:
@@ -494,7 +500,7 @@ class XgboostTreeLearner:
                 assumptions.add(f"{varname} <= {domain[1]}")
         rules = self.learned_rules | assumptions
         sprules = [sp.sympify(rule) for rule in rules]
-        Theory.save_constraints(sprules, f'xgbrules_{self.dataset}.pl')
+        Theory.save_constraints(sprules, f'xgb_{self.dataset}_{self.num_examples}.pl')
         
         return
     

@@ -26,6 +26,9 @@ class AsscoriationRuleLearner:
         if limit and limit < self.df.shape[0]:
             log.info(f"Limiting dataset to {limit} examples.")
             self.df = self.df.sample(n=limit, random_state=42)
+            self.num_examples = limit
+        else:
+            self.num_examples = self.df.shape[0]
         
         transactions = self.df.astype(str).apply(
             lambda row: [f"{col}_{val}" for col, val in row.items()], axis=1).tolist()
@@ -58,7 +61,7 @@ class AsscoriationRuleLearner:
         aruledf = association_rules(frequent_itemsets, 
                                     metric="confidence",
                                     #* Learn hard rules by default (min_threshold=1)
-                                    min_threshold=min_threshold,) #, support_only=True)
+                                    min_threshold=min_threshold,) #, support_only=True
         log.info(f"Association rules found: {len(aruledf)}")
         end = perf_counter()
         log.info(f"Association rule learning took {end - start:.2f} seconds.")
@@ -74,7 +77,8 @@ class AsscoriationRuleLearner:
         
         rules = set(self.learned_rules) | assumptions
         sprules = [sp.sympify(rule) for rule in rules]
-        Theory.save_constraints(sprules, f'arules_{self.algorithm}_{self.dataset}.pl')
+        Theory.save_constraints(sprules, 
+                                f'{self.algorithm}_{self.dataset}_{self.num_examples}.pl')
         
         return
     
