@@ -16,7 +16,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 from anuta.constructor import Constructor, Millisampler, Cidds001, Netflix, Cicids2017
-from anuta.tree import EntropyTreeLearner, XgboostTreeLearner
+from anuta.tree import EntropyTreeLearner, XgboostTreeLearner, LightGbmTreeLearner
 from anuta.association import AsscoriationRuleLearner
 from anuta.theory import Theory
 from anuta.miner import miner_versionspace, miner_valiant, validator
@@ -25,13 +25,19 @@ from anuta.cli import FLAGS
 
     
 def main(constructor: Constructor, refconstructor: Constructor, limit: int):
-    if FLAGS.dtree:
-        learner = EntropyTreeLearner(constructor, limit=limit)
-        log.info("Learning constraints using decision tree...")
-        learner.learn()
-    elif FLAGS.xgb:
-        learner = XgboostTreeLearner(constructor, limit=limit)
-        log.info("Learning constraints using XGBoost...")
+    if FLAGS.tree:
+        match FLAGS.tree:
+            case 'dt':
+                learner = EntropyTreeLearner(constructor, limit=limit)
+                log.info("Learning constraints using normal decision tree...")
+            case 'xgb':
+                learner = XgboostTreeLearner(constructor, limit=limit)
+                log.info("Learning constraints using XGBoost...")
+            case 'lgbm':
+                learner = LightGbmTreeLearner(constructor, limit=limit)
+                log.info("Learning constraints using LightGBM...")
+            case _:
+                raise ValueError(f"Unknown tree type: {FLAGS.tree}")
         learner.learn()
     elif FLAGS.assoc:
         learner = AsscoriationRuleLearner(
@@ -72,7 +78,7 @@ if __name__ == '__main__':
     if FLAGS.learn:
         refdata = FLAGS.ref
         refconstructor = None
-        if not FLAGS.dtree and not FLAGS.assoc and not FLAGS.xgb:
+        if not FLAGS.tree and not FLAGS.assoc:
             if not refdata:
                 if dataset == 'cidds':
                     refdata = "data/cidds_wk4_all.csv"

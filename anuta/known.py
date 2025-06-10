@@ -79,7 +79,7 @@ popular_ports = [
 #******************** CIDDS-001 Domain Knowledge begins ********************
 #? Should port be a categorical variable? Sometimes we need range values (i.e., application and dynamic ports).
 cidds_categoricals = ['Flags', 'Proto', 'SrcIpAddr', 'DstIpAddr'] + ['SrcPt', 'DstPt']
-cidds_numericals = ['Packets', 'Bytes', 'Flows', 'Duration']
+cidds_numericals = ['Packets', 'Bytes', 'Duration']
 cidds_ips = ['private_p2p', 'private_broadcast', 'any', 'public_p2p', 'dns']
 cidds_ports = [0, 3, 8, 11, 22, 25, 
             #    23, #* Telnet

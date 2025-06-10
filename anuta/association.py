@@ -14,6 +14,28 @@ from anuta.grammar import DomainType
 from anuta.theory import Theory
 
 
+def get_missing_domain_rules(examples, domains) -> List[str]:
+    """
+    Generate rules for missing domains based on the provided examples and domains.
+    """
+    rules = []
+    for varname, domain in domains.items():
+        if domain.kind == DomainType.CATEGORICAL:
+            # Check if the variable is present in the examples
+            if varname not in examples.columns:
+                continue
+            
+            # Get unique values in the column
+            unique_values = set(examples[varname].unique())
+            domain_values = set(domain.values)
+            missing_values = domain_values - unique_values
+            if missing_values:
+                # Create rules for missing values
+                for value in missing_values:
+                    rule = f"Ne({varname},{value})"
+                    rules.append(rule)
+    return rules
+
 class AsscoriationRuleLearner:
     def __init__(self, constructor: Constructor, algorithm='fpgrowth', 
                  limit=None, min_support=1e-10, **kwargs):
@@ -74,6 +96,7 @@ class AsscoriationRuleLearner:
             if domain.kind == DomainType.CATEGORICAL:
                 assumptions.add(f"{varname} >= 0")
                 assumptions.add(f"{varname} <= {max(domain.values)}")
+        # assumptions = set(assumptions) | set(get_missing_domain_rules(self.df, self.domains))
         
         rules = set(self.learned_rules) | assumptions
         sprules = [sp.sympify(rule) for rule in rules]

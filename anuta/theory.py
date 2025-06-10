@@ -43,9 +43,9 @@ class Constraint(object):
 
 class Theory(object):
     def __init__(self, path_to_constraints: str):
-        self.constraints = Theory.load_constraints(path_to_constraints)
+        self.constraints = self.load_constraints(path_to_constraints)
         # self._theory = Theory.create(self.constraints, path_to_constraints)
-        self._theory = Theory.z3create(self.constraints)
+        self._theory = self.z3create(self.constraints)
     
     def proves(self, query: str, verbose: bool=True) -> bool:
         """Checks the existence of a proof of query from theory (syntactic consequence).
