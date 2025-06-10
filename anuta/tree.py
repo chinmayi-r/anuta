@@ -88,6 +88,7 @@ class EntropyTreeLearner:
             # model_id="reg_tree",
             ntrees=1,                 # Build only one tree
             max_depth=len(variables)//2, #TODO: To be tuned
+            #* Minimum number of observations in a leaf)
             min_rows=100,             #TODO: To be tuned
             sample_rate=1.0,          # Use all rows
             mtries=-2,                # Use all features (set to -2 for all features)
@@ -602,7 +603,7 @@ class XgboostTreeLearner:
                             targetmin = record['target_range']['min']
                             targetmax = record['target_range']['max']
                             if self.dtypes[targetvar] == 'int':
-                                targetmin, targetmax = int(targetmin), int(targetmax)
+                                targetmin, targetmax = math.floor(targetmin), math.ceil(targetmax)
                             conclusion = f"(({targetvar}>={targetmin}) & ({targetvar}<={targetmax}))"
                         rule = f"({premise}) >> {conclusion}"
                         rules.add(rule)
@@ -641,9 +642,10 @@ class XgboostTreeLearner:
                     # Combine with target values
                     df = pd.DataFrame({'leaf': leaf_indices, 'target': self.examples[target]})
                     # Group by leaf and get min/max
-                    leafdf = df.groupby('leaf')['target'].agg(['min', 'max'])
+                    leafdf = df.groupby('leaf')['target'].agg(['min', 'max', 'count']).reset_index()
                     leafdf.reset_index(inplace=True)
                     for i, row in leafdf.iterrows():
+                        #TODO: Filter by min count in a leaf?
                         leafranges[int(row['leaf'])] = {
                             'min': row['min'],
                             'max': row['max'],
@@ -1032,7 +1034,7 @@ class LightGbmTreeLearner:
                             targetmin = record['target_range']['min']
                             targetmax = record['target_range']['max']
                             if self.dtypes[targetvar] == 'int':
-                                targetmin, targetmax = int(targetmin), int(targetmax)
+                                targetmin, targetmax = math.floor(targetmin), math.ceil(targetmax)
                             conclusion = f"(({targetvar}>={targetmin}) & ({targetvar}<={targetmax}))"
                         rule = f"({premise}) >> {conclusion}"
                         rules.add(rule)
@@ -1078,13 +1080,14 @@ class LightGbmTreeLearner:
             y = self.examples[target]
             leaf_indices = lgbm.predict(X, pred_leaf=True)
             #* Assuming only one tree, flatten the leaf indices
-            leafdf = pd.DataFrame(leaf_indices, columns=['leaf'])
-            leafdf['target'] = y
+            leaf_indices = leaf_indices.flatten()
+            leafdf = pd.DataFrame({'leaf': leaf_indices, 'target': y})
             leafdf = leafdf.groupby('leaf')['target'].agg(['min', 'max', 'count'])
             leafdf.reset_index(inplace=True)
             leafdf
             leafranges = {}
             for i, row in leafdf.iterrows():
+                #TODO: Filter by min count in a leaf?
                 leafranges[int(row['leaf'])] = {
                     'min': row['min'],
                     'max': row['max'],
