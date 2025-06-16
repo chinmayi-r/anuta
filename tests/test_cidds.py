@@ -4,7 +4,7 @@ import pytest
 from tqdm import tqdm
 from rich import print as pprint
 
-from anuta.theory import Theory
+from anuta.theory import Theory, ProofResult
 
 
 @pytest.fixture
@@ -19,16 +19,17 @@ def theory() -> Theory:
     # modelpath = 'results/cidds/nodc/learned_8192.pl'
     # modelpath = 'results/cidds/nodc/learned_1024_checked.pl'
     # modelpath = 'results/cidds/nodc/learned_256_checked.pl'
-    # modelpath = 'results/cidds/dc/learned_256.pl'
+    modelpath = 'rules/cidds/nodc/learned_256.pl'
     # modelpath = 'results/cidds/dc/learned_4096_checked.pl'
     # modelpath = 'learned_cidds_128.pl'
-    modelpath = 'dtnum_hmine.pl'
+    # modelpath = 'dtnum_hmine.pl'
     # modelpath = 'dtree_cidds_cat.pl'
     # modelpath = 'dtree_cidds_10000.pl'
     # modelpath = 'fpgrowth_cidds.pl'
-    # modelpath = 'hmine_cidds_100000.pl'
-    modelpath = 'xgb_cidds_10000.pl'
-    modelpath = 'lgbm_cidds_10000.pl'
+    modelpath = 'hmine_cidds_10000.pl'
+    # # modelpath = 'xgb_cidds_1000000_1feat.pl'
+    # modelpath = 'lgbm_cidds_100000.pl'
+    # modelpath = 'dt_cidds_10000.pl'
     # modelpath = 'rules/cidds/new/learned_cidds_8192_filtered.pl'
     # modelpath = 'rules/cidds/new/learned_cidds_8192_checked.pl'
     return Theory(modelpath)
@@ -46,12 +47,14 @@ def test_cidds(cases: List[Dict[str, str]], theory: Theory) -> None:
 
         new_successes = 0
         for query in cases:
-            entailed = theory.z3proves(query, verbose=False)
+            result = theory.z3proves(query, verbose=False)
+            # result = theory.proves(query, verbose=False)
             # assert entailed, f"Failed Test #{i}"
-            if entailed:
+            if result == ProofResult.ENTAILMENT:
                 new_successes += 1
             else:
                 print(f"Failed Test #{i+1}:")
+                pprint(f"\t{result}")
                 pprint("\tQuery: ", query)
                 print(f"\tMeaning: {q['description']}")
         if new_successes == nqueries:

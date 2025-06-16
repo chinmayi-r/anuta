@@ -2,7 +2,7 @@
 data/Millisampler-data
 
 *.json
-/data/*.csv
+data/*.csv
 *.rule
 data/
 results/
@@ -10,6 +10,8 @@ results/
 **.pkl
 *.pl
 *.csv
+*.txt
+results/
 
 .ipynb_checkpoints
 */.ipynb_checkpoints/*
