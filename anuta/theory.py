@@ -1,3 +1,4 @@
+from enum import Enum
 import json
 import sympy as sp
 from sympy.logic.inference import satisfiable
@@ -13,6 +14,11 @@ from IPython.display import display
 from anuta.utils import *
 from anuta.known import *
 
+
+class ProofResult(Enum):
+    ENTAILMENT = "Entailed"
+    CONTRADICATION = "Contradiction"
+    UNKNOWN = "Contingency/Unknown"
 
 class Constraint(object):
     #^ Can't inherit from sympy.Expr as it causes AttributeError on newly defined attributes.
@@ -43,15 +49,17 @@ class Constraint(object):
 
 class Theory(object):
     def __init__(self, path_to_constraints: str):
+        self.path_to_constraints = path_to_constraints
         self.constraints = self.load_constraints(path_to_constraints)
-        # self._theory = Theory.create(self.constraints, path_to_constraints)
-        self._theory = self.z3create(self.constraints)
+        # self._theory = self.create(self.constraints, path_to_constraints)
+        self._z3theory = self.z3create(self.constraints)
     
-    def proves(self, query: str, verbose: bool=True) -> bool:
+    def proves(self, query: str, verbose: bool=True) -> ProofResult:
         """Checks the existence of a proof of query from theory (syntactic consequence).
         
         We use a Fitch proof system, which is sound and complete for propositional logic.
         """
+        self._theory = self.create(self.constraints, self.path_to_constraints, save=False)
         query = sp.sympify(query)
         if verbose:
             pprint("Query:", query, sep='\t')
@@ -101,37 +109,152 @@ class Theory(object):
         #* If the negation is not satisfiable (i.e., there is no interpretation
         #* that KB is true but query is false), then the entailment holds.
         entailed = not any(sats)
+        
+        # queries = []
+        # for q, e in query:
+        #     if e == true:
+        #         queries.append(~q)
+        #     else:
+        #         queries.append(q)
+        # entailed = not satisfiable(sp.And(self._theory, *queries))
+        result = ProofResult.ENTAILMENT if entailed else ProofResult.UNKNOWN
+        
+        #* Need to check if the query is a contradiction.
+        if not entailed:
+            # queries = []
+            # for q, e in query:
+            #     if e == true:
+            #         queries.append(q)
+            #     else:
+            #         queries.append(~q)
+            # #* Check if the query is a contradiction.
+            # sat = satisfiable(sp.And(self._theory, *queries))
+            
+            sats = [
+                ~sp.Xor(
+                    bool(satisfiable(sp.And(self._theory, q))),
+                    expected,
+                )
+                for q, expected in query
+            ]
+            sat = all(sats)
+            
+            if not sat:
+                result = ProofResult.CONTRADICATION
+                if verbose:
+                    pprint("Counterexample found:")
+                    pprint(sat)
+            else:
+                result = ProofResult.UNKNOWN
+        
         end = perf_counter()
         
         if verbose:
             pprint("Entailed by theory:", entailed, sep=' ')
             pprint(f"Inference time:\t{end-start:.2f} s")
-        return entailed
+        return result
     
-    def z3proves(self, query, verbose=True):
+    def z3proves(self, query, verbose=True) -> ProofResult:
         """Try to prove the given claim."""
         query = eval(str(sp.sympify(query)), z3evalmap)
-        if verbose: display(query)
+        if verbose:
+            display(query)
             
         s = z3.Solver()
         s.add(z3.And(
-            self._theory,
+            self._z3theory,
             z3.Not(query)
         ))
-        proved = False
         r = s.check()
         if r == z3.unsat:
-            proved = True
+            #* If the negation of the query is unsatisfiable, then the query is entailed.
+            result = ProofResult.ENTAILMENT
         elif r == z3.unknown:
+            #* If the solver cannot determine the satisfiability, we consider it unknown/contingency.
+            result = ProofResult.UNKNOWN
+        elif r == z3.sat:
+            #* If the negation of the query is satisfiable, then the query is a contradiction.
+            result = ProofResult.CONTRADICATION
             if verbose:
-                print("Failed to prove")
-                print(s.model())
-        else:
-            if verbose:
-                print("Counterexample:")
+                pprint("Counterexample found:")
                 pprint(s.model())
-        if verbose: pprint(proved)
-        return proved
+        
+        # query = sp.sympify(query)
+        # if type(query) == sp.Equivalent:
+        #     #* Biconditional introduction/elimination for Fitch proof system.
+        #     lhs, rhs = query.args 
+        #     query = [
+        #         (clausify(sp.Or(~lhs, rhs)), True), #* Sufficiency
+        #         (clausify(sp.Or(~rhs, lhs)), True), #* Necessity
+        #     ]
+        # elif type(query) == sp.Implies:
+        #     #* Implies introduction/elimination for Fitch proof system.
+        #     premise, conclusion = query.args
+        #     query = [
+        #         (clausify(query), True), #* Factual
+        #         (clausify(premise >> ~conclusion), False), #* Counterfactual
+        #     ]
+        # # elif type(query) == sp.Equality:
+        # #     lhs, rhs = query.args
+        # #     query = [
+        # #         #! lhs==rhs could be present and the following would be false.
+        # #         (lhs >= rhs, true), #* A ≥ B
+        # #         (rhs >= lhs, true), #* B ≥ A
+        # #     ]
+        # else:
+        #     query = [(clausify(query), True)]
+        
+        # checks = []
+        # solvers: List[z3.Solver] = []
+        # for q, expected in query:
+        #     z3q = eval(str(q), z3evalmap)
+        #     if verbose: display(query)
+            
+        #     s = z3.Solver()
+        #     s.add(z3.And(
+        #         self._z3theory,
+        #         z3.Not(z3q)
+        #     ))
+        #     r = s.check()
+        #     if r == z3.unsat:
+        #         #* If the negation of the query is unsatisfiable, then the query is entailed.
+        #         checks.append(True == expected)
+        #     elif r == z3.unknown:
+        #         #* If the solver cannot determine the satisfiability, we consider it unknown/contingency.
+        #         checks.append(False == expected)
+        #     elif r == z3.sat:
+        #         #* If the negation of the query is satisfiable, then the query is a contradiction.
+        #         checks.append(False == expected)
+        #     solvers.append(s)
+    
+        # #* If all checks are True, then the query is passed.
+        # if all(checks):
+        #     result = ProofResult.PROVED
+        # elif any(checks):
+        #     result = ProofResult.UNKNOWN
+        # else:
+        #     result = ProofResult.CONTRADICATION
+        #     if verbose:
+        #         pprint("Counterexample found:")
+        #         pprint(solvers[0].model())
+                    
+            #! We DO NOT neeed a second call since z3 already checks for satisfiability.
+            # s.reset()
+            # s.add(z3.And(
+            #     self._z3theory,
+            #     query
+            # ))
+            # r = s.check()
+            # if r == z3.unsat:
+            #     proved = ProofResult.CONTRADICATION
+            #     if verbose:
+            #         pprint("Counterexample found:")
+            #         pprint(s.model())
+            # elif r == z3.sat:
+                # result = ProofResult.UNKNOWN
+
+        if verbose: pprint(result)
+        return result
         
         
     @staticmethod
@@ -149,7 +272,7 @@ class Theory(object):
     def create(
         constraints: List[sp.Expr|Constraint] | Set[sp.Expr|Constraint], 
         path: str,
-        save=True,
+        save=False,
     ) -> sp.Expr:
         log.info("Creating theory...")
         #* Take the last part of the path w/o extension as the theory name.
@@ -284,7 +407,7 @@ class Theory(object):
                   save_path=None) -> sp.Expr:
         if dataset != 'cidds':
             raise ValueError(f"Dataset not supported: {dataset}")
-
+        #* CIDDs specific conversions.
         def interpret_cidds(varname, varval):
             # varval = int(varval)
             # if any([op in varval for op in ['=', '≠', '∧', '∨', '⇒', '≥', '×']]):
@@ -298,7 +421,7 @@ class Theory(object):
                 value = cidds_flags_conversion.inverse[varval]
             elif 'Proto' in varname:
                 value = cidds_proto_conversion.inverse[varval]
-            elif 'Port' in varname:
+            elif 'Pt' in varname:
                 value = cidds_port_conversion.inverse[varval]
             else:
                 value = varval
@@ -316,19 +439,24 @@ class Theory(object):
             for arg in args:
                 s += f"{arg} v "
             return s[:-3]
-        def implies_str(a, b): return f"({a} ⇒ {b})"
+        def implies_str(a, b): return f"({a}) ⇒ ({b})"
         def sym_str(a): return a
         def int_str(a): return int(a)
+        def float_str(n, precision): return f"{float(n):.3f}" #return f"{float(n):.{precision}f}"
         def gt_str(a, b): return f"({a} ≥ {b})"
+        def strict_gt_str(a, b): return f"({a} > {b})"
+        def lt_str(a, b): return f"({a} ≤ {b})"
+        def strict_lt_str(a, b): return f"({a} < {b})"
         def mul_str(a, b): return f"{a}x{b}"
 
             
         cidds_interpretation = {
             'Equality': eq_str, 'Unequality': ne_str, 'And': and_str, 'Or': or_str, 
-            'Implies': implies_str, 'Symbol': sym_str, 'Integer': int_str, 'GreaterThan': gt_str,
-            'Mul': mul_str,
+            'Implies': implies_str, 'Symbol': sym_str, 'Integer': int_str, 'Mul': mul_str, 
+            'GreaterThan': gt_str, 'LessThan': lt_str, 'Float': float_str,
+            'StrictGreaterThan': strict_gt_str, 'StrictLessThan': strict_lt_str,
         }
-        interpreted = [eval(sp.srepr(rule), cidds_interpretation) for rule in rules]
+        interpreted = sorted([eval(sp.srepr(rule), cidds_interpretation) for rule in rules])
         if save_path:
             with open(save_path, 'w') as f:
                 for rule in interpreted:

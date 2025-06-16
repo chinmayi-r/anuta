@@ -42,7 +42,7 @@ class EntropyTreeLearner:
             constructor.df = constructor.df.sample(n=limit, random_state=42)
             self.num_examples = limit
         else:
-            self.num_examples = constructor.df.shape[0]
+            self.num_examples = 'all'
             
         self.dataset = constructor.label
         match constructor.label:
@@ -155,7 +155,7 @@ class EntropyTreeLearner:
         
         rules = self.learned_rules | assumptions
         sprules = [sp.sympify(rule) for rule in rules]
-        Theory.save_constraints(sprules, f'dtree_{self.dataset}_{self.num_examples}_cat1feat.pl')
+        Theory.save_constraints(sprules, f'dt_{self.dataset}_{self.num_examples}.pl')
         
         #TODO: Interpret rules with domains to enable `X [opt] s•Y` rules.
         return
@@ -390,7 +390,7 @@ class XgboostTreeLearner:
             constructor.df = constructor.df.sample(n=limit, random_state=42)
             self.num_examples = limit
         else:
-            self.num_examples = constructor.df.shape[0]
+            self.num_examples = 'all'
             
         self.dataset = constructor.label
         match constructor.label:
@@ -811,7 +811,7 @@ class LightGbmTreeLearner:
             constructor.df = constructor.df.sample(n=limit, random_state=42)
             self.num_examples = limit
         else:
-            self.num_examples = constructor.df.shape[0]
+            self.num_examples = 'all'
             
         self.dataset = constructor.label
         match constructor.label:

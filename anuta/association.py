@@ -50,7 +50,7 @@ class AsscoriationRuleLearner:
             self.df = self.df.sample(n=limit, random_state=42)
             self.num_examples = limit
         else:
-            self.num_examples = self.df.shape[0]
+            self.num_examples = 'all'
         
         transactions = self.df.astype(str).apply(
             lambda row: [f"{col}_{val}" for col, val in row.items()], axis=1).tolist()

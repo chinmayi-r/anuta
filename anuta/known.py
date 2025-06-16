@@ -20,7 +20,7 @@ known_ports = [
     995,  # POP3S
     8080 # Alternative HTTP
 ]
-UNKNOWN_PORT = 60_000  # Default value for unknown ports
+UNINTERESTED_PORT = 60_000  # Default value for unknown ports
 #******************** Netflix data Domain Knowledge begins ********************
 netflix_flags = ['SYN', 'ACK-SYN', 'ACK', 'ACK-PSH', 'ACK-FIN']
 netflix_seqnum_increaments = [1]
@@ -90,12 +90,12 @@ cidds_reals = ['Duration']
 
 #* Map strings to integers
 cidds_ip_conversion = bidict({ip: i for i, ip in enumerate(cidds_ips)})
-cidds_flags_conversion = bidict({flag: i for i, flag in enumerate(['noflags', 'flags'])})
+cidds_flags_conversion = bidict({flag: i for i, flag in enumerate(['noflags', 'hasflags'])})
 #TODO: Change the mapping to standard NetFlow codes: 
 # https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml
 cidds_proto_conversion = bidict({proto: i for i, proto in enumerate(['TCP', 'UDP', 'ICMP', 'IGMP'])})
 cidds_port_conversion = bidict({port: port for port in cidds_ports + known_ports})
-cidds_port_conversion[UNKNOWN_PORT] = 'UNK' #* Add the DONTCARE_PORT to the port conversion
+cidds_port_conversion.inverse[UNINTERESTED_PORT] = 'uninterested'
 cidds_conversions = {
     'ip': cidds_ip_conversion,
     'flags': cidds_flags_conversion,
@@ -110,7 +110,7 @@ cidds_constants = {
 
 def cidds_port_map(port):
     if port not in set(cidds_ports) | set(known_ports):
-        return UNKNOWN_PORT
+        return UNINTERESTED_PORT
     else:
         return port
     
@@ -143,9 +143,9 @@ def cidds_flag_map(flag: str):
 	#! Don't consider the specific 'Flags' values for now
     new_flag = ''
     if flag == '......':
-        new_flag = 'noflags'
+        new_flag = cidds_flags_conversion.inverse[0]
     else:
-        new_flag = 'flags'
+        new_flag = cidds_flags_conversion.inverse[1]
     
     return cidds_flags_conversion[new_flag]
 #******************** CIDDS-001 Domain Knowledge ends ********************
