@@ -1,0 +1,90 @@
+If the destination ip address is a dns server and flags are set, then the destination port is 53 and the source port can be any value.
+If the destination ip address is a dns server and the protocol is icmp, then the destination port is 3.
+If the destination ip address is a dns server and the protocol is tcp, then the destination port is 53 and the source port can be any value.
+If the destination ip address is a dns server and the protocol is udp, then the destination port is 53 and the source port can be any value.
+If the destination ip address is a dns server and the source port is 0, then the destination port is 3 and the protocol is icmp.
+If the destination ip address is a dns server and the source port can be any value, then the destination port is 53.
+If the destination ip address is a dns server, then the source ip address is a private peer-to-peer address.
+If the destination ip address is a private broadcast address and the destination port can be any value, then the source ip address is a private peer-to-peer address and the source port can be any value.
+If the destination ip address is a private broadcast address and the source port can be any value, then the destination port can be any value and the source ip address is a private peer-to-peer address.
+If the destination ip address is a private broadcast address, then flags are not set and the protocol is udp.
+If the destination ip address is a private peer-to-peer address and the destination port is 123, then the source ip address is a public peer-to-peer address.
+If the destination ip address is a private peer-to-peer address and the destination port is 67, then the source ip address is a private peer-to-peer address.
+If the destination ip address is a private peer-to-peer address and the destination port can be any value and the source ip address is a private peer-to-peer address, then flags are set and the protocol is tcp.
+If the destination ip address is a private peer-to-peer address and flags are not set and the source port can be any value, then the destination port can be any value and the source ip address is a public peer-to-peer address.
+If the destination ip address is a private peer-to-peer address and the protocol is icmp and the source ip address is a private peer-to-peer address, then the destination port is 3.
+If the destination ip address is a private peer-to-peer address and the protocol is udp and the source port can be any value, then the destination port can be any value and the source ip address is a public peer-to-peer address.
+If the destination ip address is a private peer-to-peer address and the source ip address is a private peer-to-peer address and the source port is 0, then the destination port is 3.
+If the destination ip address is a private peer-to-peer address and the source ip address is a private peer-to-peer address and the source port can be any value, then flags are set and the protocol is tcp.
+If the destination ip address is a private peer-to-peer address and the source port is 0, then the protocol is icmp.
+If the destination ip address is a private peer-to-peer address and the source port is 123, then the source ip address is a public peer-to-peer address.
+If the destination ip address is a private peer-to-peer address and the source port is 68, then the source ip address is a private peer-to-peer address.
+If the destination ip address is a public peer-to-peer address and the destination port can be any value, then the source port can be any value.
+If the destination ip address is a public peer-to-peer address and flags are set, then the source port can be any value.
+If the destination ip address is a public peer-to-peer address and flags are not set and the source port can be any value, then the destination port can be any value.
+If the destination ip address is a public peer-to-peer address and the protocol is tcp, then the source port can be any value.
+If the destination ip address is a public peer-to-peer address and the protocol is udp and the source port can be any value, then the destination port can be any value.
+If the destination ip address is a public peer-to-peer address, then the source ip address is a private peer-to-peer address.
+If the destination port is 0, then the destination ip address is a public peer-to-peer address and flags are not set and the protocol is igmp and the source ip address is a private peer-to-peer address and the source port is 0.
+If the destination port is 11, then the destination ip address is a private peer-to-peer address and flags are not set and the protocol is icmp and the source ip address is a public peer-to-peer address and the source port is 0.
+If the destination port is 123 and the source ip address is a private peer-to-peer address, then the destination ip address is a public peer-to-peer address.
+If the destination port is 123, then flags are not set and the protocol is udp and the source port is 123.
+If the destination port is 137, then the destination ip address is a private broadcast address and flags are not set and the protocol is udp and the source ip address is a private peer-to-peer address and the source port is 137.
+If the destination port is 138, then the destination ip address is a private broadcast address and flags are not set and the protocol is udp and the source ip address is a private peer-to-peer address and the source port is 138.
+If the destination port is 22, then flags are set and the protocol is tcp and the source ip address is a private peer-to-peer address and the source port can be any value.
+If the destination port is 25, then the destination ip address is a public peer-to-peer address and flags are set and the protocol is tcp and the source ip address is a private peer-to-peer address and the source port can be any value.
+If the destination port is 3, then flags are not set and the protocol is icmp and the source port is 0.
+If the destination port is 443, then the destination ip address is a public peer-to-peer address and flags are set and the protocol is tcp and the source ip address is a private peer-to-peer address and the source port can be any value.
+If the destination port is 53 and flags are not set, then the protocol is udp.
+If the destination port is 53, then the destination ip address is a dns server and the source ip address is a private peer-to-peer address and the source port can be any value.
+If the destination port is 67, then flags are not set and the protocol is udp and the source port is 68.
+If the destination port is 68, then flags are not set and the protocol is udp and the source ip address is a private peer-to-peer address and the source port is 67.
+If the destination port is 8, then the destination ip address is a public peer-to-peer address and flags are not set and the protocol is icmp and the source ip address is a private peer-to-peer address and the source port is 0.
+If the destination port is 80, then flags are set and the protocol is tcp and the source ip address is a private peer-to-peer address and the source port can be any value.
+If the destination port is 8080, then the destination ip address is a public peer-to-peer address and flags are set and the protocol is tcp and the source ip address is a private peer-to-peer address and the source port can be any value.
+If the destination port is 993, then the destination ip address is a private peer-to-peer address and flags are set and the protocol is tcp and the source ip address is a private peer-to-peer address and the source port can be any value.
+If the destination port can be any value and flags are not set and the source ip address is a private peer-to-peer address, then the source port can be any value.
+If the destination port can be any value and flags are not set and the source ip address is a public peer-to-peer address, then the source port can be any value.
+If the destination port can be any value and flags are not set, then the protocol is udp.
+If the destination port can be any value and the protocol is udp and the source ip address is a private peer-to-peer address, then the source port can be any value.
+If the destination port can be any value and the protocol is udp and the source ip address is a public peer-to-peer address, then the source port can be any value.
+If flags are set and the source ip address is a public peer-to-peer address, then the destination port can be any value.
+If flags are set, then the protocol is tcp.
+If flags are not set and the source ip address is a dns server, then the protocol is udp.
+If flags are not set and the source port is 53, then the protocol is udp.
+If flags are not set and the source port can be any value, then the protocol is udp.
+If the protocol is icmp, then flags are not set and the source port is 0.
+If the protocol is igmp, then the destination ip address is a public peer-to-peer address and the destination port is 0 and flags are not set and the source ip address is a private peer-to-peer address and the source port is 0.
+If the protocol is tcp and the source ip address is a public peer-to-peer address, then the destination port can be any value.
+If the protocol is tcp, then flags are set.
+If the protocol is udp, then flags are not set.
+If the source ip address is any, then the destination ip address is a private broadcast address and the destination port is 67 and flags are not set and the protocol is udp and the source port is 68.
+If the source ip address is a dns server, then the destination ip address is a private peer-to-peer address and the destination port can be any value and the source port is 53.
+If the source ip address is a private peer-to-peer address and the source port is 123, then the destination ip address is a public peer-to-peer address.
+If the source ip address is a public peer-to-peer address and the source port is 0, then the protocol is icmp.
+If the source ip address is a public peer-to-peer address and the source port can be any value, then the destination port can be any value.
+If the source ip address is a public peer-to-peer address, then the destination ip address is a private peer-to-peer address.
+If the source port is 0, then flags are not set.
+If the source port is 123, then the destination port is 123 and flags are not set and the protocol is udp.
+If the source port is 137, then the destination ip address is a private broadcast address and the destination port is 137 and flags are not set and the protocol is udp and the source ip address is a private peer-to-peer address.
+If the source port is 138, then the destination ip address is a private broadcast address and the destination port is 138 and flags are not set and the protocol is udp and the source ip address is a private peer-to-peer address.
+If the source port is 22, then the destination ip address is a private peer-to-peer address and the destination port can be any value and flags are set and the protocol is tcp.
+If the source port is 443, then the destination ip address is a private peer-to-peer address and the destination port can be any value and flags are set and the protocol is tcp and the source ip address is a public peer-to-peer address.
+If the source port is 53, then the destination ip address is a private peer-to-peer address and the destination port can be any value and the source ip address is a dns server.
+If the source port is 67, then the destination port is 68 and flags are not set and the protocol is udp and the source ip address is a private peer-to-peer address.
+If the source port is 68, then the destination port is 67 and flags are not set and the protocol is udp.
+If the source port is 80, then the destination ip address is a private peer-to-peer address and the destination port can be any value and flags are set and the protocol is tcp.
+If the source port is 8080, then the destination ip address is a private peer-to-peer address and the destination port can be any value and flags are set and the protocol is tcp and the source ip address is a public peer-to-peer address.
+If the source port is 993, then the destination ip address is a private peer-to-peer address and the destination port can be any value and flags are set and the protocol is tcp and the source ip address is a private peer-to-peer address.
+The destination ip address is less than or equal to 4.
+The destination ip address is greater than or equal to 0.
+The destination port is less than or equal to 60000.
+The destination port is greater than or equal to 0.
+The flags is less than or equal to 1.
+The flags is greater than or equal to 0.
+The protocol is less than or equal to 3.
+The protocol is greater than or equal to 0.
+The source ip address is less than or equal to 4.
+The source ip address is greater than or equal to 0.
+The source port is less than or equal to 60000.
+The source port is greater than or equal to 0.
