@@ -74,7 +74,8 @@ def call_api_with_rules(batch):
         ],
         "model": model_to_be_used,
         "max_tokens": max_tokens_per_batch,
-        "temperature": 0.0
+        "temperature": 0.0,
+        # "top_p": 0.01,  # Optional: can be adjusted for more deterministic output
     }
     
     for attempt in range(1, retries + 1):
