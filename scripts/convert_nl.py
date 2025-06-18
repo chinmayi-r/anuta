@@ -10,7 +10,8 @@ class LogicToNaturalLanguageConverter:
             'DstPt': 'destination port',
             'SrcPt': 'source port',
             'Proto': 'protocol',
-            'Flags': 'flags'
+            'Flags': 'flags',
+            'Bytes': 'bytes'
         }
         
         # Value mappings for better readability with proper articles and grammar
@@ -21,10 +22,26 @@ class LogicToNaturalLanguageConverter:
             'public_p2p': 'a public peer-to-peer address',
             'hasflags': 'set',
             'noflags': 'not set',
-            'uninterested': 'any dynamic port',
+            'uninterested': 'any dynamic port',  # Better translation for ports
             'ICMP': 'ICMP',
             'TCP': 'TCP',
             'UDP': 'UDP'
+        }
+        
+        # Context-specific mappings for uninterested values
+        self.context_specific_mappings = {
+            'port': {  # For SrcPt, DstPt fields
+                'uninterested': 'any dynamic port'
+            },
+            'ip': {  # For IP address fields
+                'uninterested': 'any IP address'
+            },
+            'protocol': {  # For Proto field
+                'uninterested': 'any protocol'
+            },
+            'default': {  # Fallback for other fields
+                'uninterested': 'any value'
+            }
         }
         
         # Special handling for certain field-value combinations
@@ -43,6 +60,25 @@ class LogicToNaturalLanguageConverter:
             '>': 'is greater than',
             '≠': 'is not equal to'
         }
+    
+    def get_field_context(self, field: str) -> str:
+        """Determine the context type for a field to use appropriate mappings."""
+        field_lower = field.lower()
+        if 'pt' in field_lower or 'port' in field_lower:
+            return 'port'
+        elif 'addr' in field_lower or 'ip' in field_lower:
+            return 'ip'
+        elif 'proto' in field_lower:
+            return 'protocol'
+        else:
+            return 'default'
+    
+    def get_contextual_value(self, field: str, value: str) -> str:
+        """Get the contextually appropriate translation for a value."""
+        if value == 'uninterested':
+            context = self.get_field_context(field)
+            return self.context_specific_mappings[context].get(value, 'any value')
+        return self.value_mappings.get(value, value)
     
     def tokenize(self, statement: str) -> List[str]:
         """Tokenize the logical statement into components."""
@@ -172,30 +208,25 @@ class LogicToNaturalLanguageConverter:
         
         field_text = self.field_mappings.get(field, field)
         
-        # Check for special phrase combinations
+        # Check for special phrase combinations first
         field_lower = field_text.lower()
         special_key = (field_lower, value)
         if special_key in self.special_phrases:
             return self.special_phrases[special_key]
         
-        # Handle "uninterested" values specially
-        if value == 'uninterested':
-            return f"the {field_text} can be any value"
-        
-        # Get value text and operator text
-        value_text = self.value_mappings.get(value, value)
+        # Get contextually appropriate value text
+        value_text = self.get_contextual_value(field, value)
         operator_text = self.operator_mappings.get(operator, operator)
         
-        # Use "the" for most fields, but handle special cases
-        if field_text.endswith('flags'):
-            # For flags, use plural verb forms
-            if operator == '=' and value in ['hasflags', 'noflags']:
-                # Already handled by special_phrases above
-                pass
+        # Handle "uninterested" values with better context
+        if value == 'uninterested':
+            if operator == '=':
+                return f"the {field_text} is {value_text}"
             else:
                 return f"the {field_text} {operator_text} {value_text}"
-        else:
-            return f"the {field_text} {operator_text} {value_text}"
+        
+        # Use "the" for most fields
+        return f"the {field_text} {operator_text} {value_text}"
     
     def expression_to_text(self, expr: Dict) -> str:
         """Convert a logical expression to natural language."""
