@@ -21,7 +21,7 @@ class LogicToNaturalLanguageConverter:
             'public_p2p': 'a public peer-to-peer address',
             'hasflags': 'set',
             'noflags': 'not set',
-            'uninterested': 'any value',
+            'uninterested': 'any dynamic port',
             'ICMP': 'ICMP',
             'TCP': 'TCP',
             'UDP': 'UDP'
