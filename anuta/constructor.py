@@ -105,6 +105,7 @@ class Yatesbury(Constructor):
                 domains[name] = Domain(DomainType.CATEGORICAL, 
                                        None, 
                                        self.df[name].unique().tolist())
+        self.anuta = Anuta(list(self.df.columns), domains, constants={})
         
         return
 

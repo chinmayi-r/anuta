@@ -133,7 +133,7 @@ class EntropyTreeLearner:
                     log.error(f"Failed to train tree for {target} with features {features}: {e}")
                     exit(1)
                 self.trees[target].append(dtree)
-                print(f"... Trained {treeid}/{total_trees} ({treeid/total_trees:.1%}) trees ({target=}).", end='\r')
+                print(f"... Trained {treeid}/{total_trees} ({treeid/total_trees:.1%}) tree groups ({target=}).", end='\r')
                 treeid += 1
         end = perf_counter()
         log.info(f"Training {total_trees} trees took {end - start:.2f} seconds.")
@@ -495,7 +495,7 @@ class XgboostTreeLearner:
                 X = self.examples[list(features)]
                 model.fit(X, y)
                 self.trees[target].append(model)
-                print(f"... Trained {treeid}/{total_trees} ({treeid/total_trees:.1%}) trees ({target=}).", end='\r')
+                print(f"... Trained {treeid}/{total_trees} ({treeid/total_trees:.1%}) tree groups ({target=}).", end='\r')
                 treeid += 1
         end = perf_counter()
         log.info(f"Training {total_trees} trees took {end - start:.2f} seconds.")
@@ -918,7 +918,7 @@ class LightGbmTreeLearner:
                 lgb_data = lgb.Dataset(X, label=y, categorical_feature=categorical_features)
                 model = lgb.train(params, lgb_data, num_boost_round=1)
                 self.trees[target].append(model)
-                print(f"... Trained {treeid}/{total_trees} ({treeid/total_trees:.1%}) trees ({target=}).", end='\r')
+                print(f"... Trained {treeid}/{total_trees} ({treeid/total_trees:.1%}) tree groups ({target=}).", end='\r')
                 treeid += 1
         end = perf_counter()
         log.info(f"Training {total_trees} trees took {end - start:.2f} seconds.")
