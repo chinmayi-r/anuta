@@ -35,8 +35,11 @@ def get_featuregroups(df: pd.DataFrame) -> Dict[str, List[Tuple[str, ...]]]:
             _featuregroup = itertools.combinations(features, n)
             featuregroup = []
             for features in _featuregroup:
-                if len(df[features].unique()) > 1:
+                features = list(features)
+                if len(features) == 1 and len(df[features[0]].unique()) == 1:
                     # Only include feature groups with more than one unique value
+                    continue
+                else:
                     featuregroup.append(features)
             featuregroups[target] += featuregroup
     return featuregroups
@@ -70,7 +73,7 @@ class EntropyTreeLearner:
             # if var in self.categoricals
             # if var in cidds_numericals
         ]
-        self.featuregroups = get_featuregroups(self.examples)
+        self.featuregroups = get_featuregroups(constructor.df)
         
         self.model_configs = {}
         self.model_configs['classification'] = dict(
