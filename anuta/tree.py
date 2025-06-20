@@ -32,15 +32,14 @@ def get_featuregroups(df: pd.DataFrame) -> Dict[str, List[Tuple[str, ...]]]:
             continue
         features = [v for v in variables if v != target]
         for n in range(1, len(features)+1):
-            _featuregroup = itertools.combinations(features, n)
+            _featuregroup = [list(combo) for combo in itertools.combinations(features, n)]
             featuregroup = []
-            for features in _featuregroup:
-                features = list(features)
-                if len(features) == 1 and len(df[features[0]].unique()) == 1:
+            for combo in _featuregroup:
+                if len(combo) == 1 and len(df[combo[0]].unique()) == 1:
                     # Only include feature groups with more than one unique value
                     continue
                 else:
-                    featuregroup.append(features)
+                    featuregroup.append(combo)
             featuregroups[target] += featuregroup
     return featuregroups
 
