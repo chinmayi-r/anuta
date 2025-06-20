@@ -21,6 +21,49 @@ known_ports = [
     8080 # Alternative HTTP
 ]
 UNINTERESTED_PORT = 60_000  # Default value for unknown ports
+
+#************************ Yatesbury ********************
+yatesbury_categoricals = ["SrcIp", "DstIp", "SrcPt", "DstPt", 
+                        "Proto", "FlowDir", "Decision", "FlowState", "Label"]
+yatesbury_numericals = ["PktSent", "BytesSent", "PktRecv", "BytesRecv"]
+#* Gurantee ordering (https://github.com/microsoft/Yatesbury?tab=readme-ov-file#dataset-description)
+yatesbury_direction_conversion = bidict({direction: i for i, direction in enumerate(['I', 'O'])})
+yatesbury_proto_conversion = bidict({proto: i for i, proto in enumerate(['T', 'U'])})
+yatesbury_decision_conversion = bidict({decision: i for i, decision in enumerate(['A', 'D'])})
+yatesbury_flowstate_conversion = bidict({state: i for i, state in enumerate(['B', 'C', 'E'])})
+#* Taking into account every port for now.
+yatesbury_port_conversion = bidict({port: port for port in range(1, 65536)})
+
+def yatesbury_direction_map(direction: str):
+    if direction in yatesbury_direction_conversion:
+        return yatesbury_direction_conversion[direction]
+    else:
+        raise ValueError(f"Unknown flow direction: {direction}")
+def yatesbury_proto_map(proto: str):
+    if proto in yatesbury_proto_conversion:
+        return yatesbury_proto_conversion[proto]
+    else:
+        raise ValueError(f"Unknown protocol: {proto}")
+def yatesbury_decision_map(decision: str):
+    if decision in yatesbury_decision_conversion:
+        return yatesbury_decision_conversion[decision]
+    else:
+        raise ValueError(f"Unknown decision: {decision}")
+def yatesbury_flowstate_map(state: str):
+    if state in yatesbury_flowstate_conversion:
+        return yatesbury_flowstate_conversion[state]
+    else:
+        raise ValueError(f"Unknown flow state: {state}")
+
+
+def yatesbury_ip_map(ip: str):
+    """
+    Map IP addresses to integers for Yatesbury dataset.
+    """
+    assert ip.startswith('172.0.0.'), "IP address must start with '172.0.0.'"
+    return int(ip.split('.')[-1])
+
+yatesbury_ips = ['172.0.0.4', '172.0.0.5', '172.0.0.6', '172.0.0.7', '172.0.0.8', '172.0.0.9', '172.0.0.10', '172.0.0.11', '172.0.0.12', '172.0.0.13', '172.0.0.14', '172.0.0.15', '172.0.0.16', '172.0.0.17', '172.0.0.18', '172.0.0.19', '172.0.0.20',]
 #******************** Netflix data Domain Knowledge begins ********************
 netflix_flags = ['SYN', 'ACK-SYN', 'ACK', 'ACK-PSH', 'ACK-FIN']
 netflix_seqnum_increaments = [1]

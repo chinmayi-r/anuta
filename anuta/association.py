@@ -44,7 +44,7 @@ class AsscoriationRuleLearner:
         self.kwargs = kwargs
         self.dataset = constructor.label
         #* Only support categorical variables.
-        self.df = constructor.df[cidds_categoricals]
+        self.df = constructor.df[constructor.categoricals]
         if limit and limit < self.df.shape[0]:
             log.info(f"Limiting dataset to {limit} examples.")
             self.df = self.df.sample(n=limit, random_state=42)

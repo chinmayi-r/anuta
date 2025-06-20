@@ -15,7 +15,7 @@ import json
 import warnings
 warnings.filterwarnings("ignore")
 
-from anuta.constructor import Constructor, Millisampler, Cidds001, Netflix, Cicids2017
+from anuta.constructor import Constructor, Millisampler, Cidds001, Netflix, Cicids2017, Yatesbury
 from anuta.tree import EntropyTreeLearner, XgboostTreeLearner, LightGbmTreeLearner
 from anuta.association import AsscoriationRuleLearner
 from anuta.theory import Theory
@@ -41,7 +41,7 @@ def main(constructor: Constructor, refconstructor: Constructor, limit: int):
         learner.learn()
     elif FLAGS.assoc:
         learner = AsscoriationRuleLearner(
-            constructor, algorithm=FLAGS.aalgo, limit=limit)
+            constructor, algorithm=FLAGS.assoc, limit=limit)
         log.info("Learning constraints using association rules...")
         learner.learn()
     elif FLAGS.baseline:
@@ -55,14 +55,17 @@ if __name__ == '__main__':
     assert '.csv' in FLAGS.data, "Data file is not CSV."
     data_label = FLAGS.data.split('/')[-1].split('.')[-2]
     dataset = FLAGS.dataset.lower()
-    if dataset == 'cidds':
-        constructor = Cidds001(FLAGS.data)
-    elif dataset == 'netflix':
-        constructor = Netflix(FLAGS.data)
-    elif dataset == 'cicids':
-        constructor = Cicids2017(FLAGS.data)
-    else:
-        raise ValueError(f"Unknown dataset: {dataset}")
+    match dataset:
+        case 'cidds':
+            constructor = Cidds001(FLAGS.data)
+        case 'netflix':
+            constructor = Netflix(FLAGS.data)
+        case 'cicids':
+            constructor = Cicids2017(FLAGS.data)
+        case 'yatesbury':
+            constructor = Yatesbury(FLAGS.data)
+        case _:
+            raise ValueError(f"Unknown dataset: {dataset}")
     
     if FLAGS.limit:
         limit = FLAGS.limit
@@ -80,15 +83,16 @@ if __name__ == '__main__':
         refconstructor = None
         if not FLAGS.tree and not FLAGS.assoc:
             if not refdata:
-                if dataset == 'cidds':
-                    refdata = "data/cidds_wk4_all.csv"
-                    refconstructor = Cidds001(refdata)
-                elif dataset == 'netflix':
-                    refdata = "data/netflix.csv"
-                    refconstructor = Netflix(refdata)
-                elif dataset == 'cicids':
-                    refdata = "data/cicids_friday_normal.csv"
-                    refconstructor = Cicids2017(refdata)
+                match dataset:
+                    case 'cidds':
+                        refdata = "data/cidds_wk4_all.csv"
+                        refconstructor = Cidds001(refdata)
+                    case 'netflix':
+                        refdata = "data/netflix.csv"
+                        refconstructor = Netflix(refdata)
+                    case 'cicids':
+                        refdata = "data/cicids_friday_normal.csv"
+                        refconstructor = Cicids2017(refdata)
             else:
                 refconstructor = Cidds001(refdata) \
                     if dataset == 'cidds' else Netflix(refdata)

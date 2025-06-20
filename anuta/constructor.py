@@ -62,12 +62,51 @@ class Constructor(object):
         self.label: str = None
         self.df: pd.DataFrame = None
         self.anuta: AnutaMilli | Anuta = None
+        self.categoricals: list[str] = []
     
     def get_indexset_and_counter(
             self, df: pd.DataFrame,
             domains: dict[str, Domain],
         ) -> tuple[dict[str, dict[str, np.ndarray]], dict[str, DomainCounter]]:
         pass
+
+class Yatesbury(Constructor):
+    def __init__(self, filepath) -> None:
+        self.label = 'yatesbury'
+        log.info(f"Loading data from {filepath}")
+        self.categoricals = yatesbury_categoricals
+        self.categoricals.remove('Decision')
+        self.categoricals.remove('Label')
+        self.df = pd.read_csv(filepath)
+        allowed_cols = yatesbury_categoricals + yatesbury_numericals
+        
+        for col in self.df.columns:
+            #* Drop labels for now, since we aren't aiming to predict them 
+            #*  but rather help the models.
+            if col not in allowed_cols:
+                self.df.drop(columns=[col], inplace=True)
+        
+        self.df['SrcIp'] = self.df['SrcIp'].apply(yatesbury_ip_map)
+        self.df['DstIp'] = self.df['DstIp'].apply(yatesbury_ip_map)
+        self.df['FlowDir'] = self.df['FlowDir'].apply(yatesbury_direction_map)
+        self.df['Proto'] = self.df['Proto'].apply(yatesbury_proto_map)
+        # self.df['Decision'] = self.df['Decision'].apply(yatesbury_decision_map)
+        self.df['FlowState'] = self.df['FlowState'].apply(yatesbury_flowstate_map)
+        self.df = self.df.astype(int)
+        
+        domains = {}
+        for name in self.df.columns:
+            if name not in self.categoricals:
+                domains[name] = Domain(DomainType.NUMERICAL, 
+                                       Bounds(self.df[name].min().item(), 
+                                              self.df[name].max().item()), 
+                                       None)
+            else:
+                domains[name] = Domain(DomainType.CATEGORICAL, 
+                                       None, 
+                                       self.df[name].unique().tolist())
+        
+        return
 
 class Cicids2017(Constructor):
     def __init__(self, filepath) -> None:
@@ -89,11 +128,11 @@ class Cicids2017(Constructor):
         col_to_var = {col: to_big_camelcase(col, sep='_') for col in self.df.columns}
         self.df.rename(columns=col_to_var, inplace=True)
         variables = list(self.df.columns)
-        self.categorical = ['Protocol']
+        self.categoricals = ['Protocol']
         
         domains = {}
         for name in self.df.columns:
-            if name not in self.categorical:
+            if name not in self.categoricals:
                 domains[name] = Domain(DomainType.NUMERICAL, 
                                        Bounds(self.df[name].min().item(), 
                                               self.df[name].max().item()), 
@@ -127,7 +166,7 @@ class Cicids2017(Constructor):
         ) -> tuple[dict[str, dict[str, np.ndarray]], dict[str, DomainCounter]]:
         indexset = {}
         #^ dict[var: dict[val: array(indices)]] // Var -> {Distinct value -> indices}
-        for cat in self.categorical:
+        for cat in self.categoricals:
             # print(f"Processing {cat}")
             indices = df.groupby(by=cat).indices
             indexset[cat] = indices
@@ -207,14 +246,14 @@ class Netflix(Constructor):
         col_to_var = {col: to_big_camelcase(col, sep='_') for col in self.df.columns}
         self.df.rename(columns=col_to_var, inplace=True)
         variables = list(self.df.columns)
-        self.categorical = []
+        self.categoricals = []
         for name in self.df.columns:
             if not any(keyword in name.lower() for keyword in ('seq', 'ack', 'len', 'ts')):
-                self.categorical.append(name)
+                self.categoricals.append(name)
         
         domains = {}
         for name in self.df.columns:
-            if name not in self.categorical:
+            if name not in self.categoricals:
                 domains[name] = Domain(DomainType.NUMERICAL, 
                                        Bounds(self.df[name].min().item(), 
                                               self.df[name].max().item()), 
@@ -248,7 +287,7 @@ class Netflix(Constructor):
         ) -> tuple[dict[str, dict[str, np.ndarray]], dict[str, DomainCounter]]:
         indexset = {}
         #^ dict[var: dict[val: array(indices)]] // Var -> {Distinct value -> indices}
-        for cat in self.categorical:
+        for cat in self.categoricals:
             # print(f"Processing {cat}")
             indices = df.groupby(by=cat).indices
             indexset[cat] = indices

@@ -45,17 +45,14 @@ class EntropyTreeLearner:
             self.num_examples = 'all'
             
         self.dataset = constructor.label
-        match constructor.label:
-            case 'cidds':
-                constructor: Cidds001 = constructor
-                constructor.df[constructor.categoricals] = \
-                    constructor.df[constructor.categoricals].astype('category')
-                self.examples: h2o.H2OFrame = h2o.H2OFrame(constructor.df)
-                self.categoricals = constructor.categoricals
-                self.examples[self.categoricals] = self.examples[self.categoricals].asfactor()
-            case _:
-                #TODO: Add support for other datasets
-                raise ValueError(f"Unsupported constructor: {constructor.label}")
+        assert self.dataset in ['cidds', 'yatesbury'], \
+            f"Unsupported dataset: {self.dataset}. Supported datasets: ['cidds', 'yatesbury']"
+        constructor: Cidds001 = constructor
+        constructor.df[constructor.categoricals] = \
+            constructor.df[constructor.categoricals].astype('category')
+        self.examples: h2o.H2OFrame = h2o.H2OFrame(constructor.df)
+        self.categoricals = constructor.categoricals
+        self.examples[self.categoricals] = self.examples[self.categoricals].asfactor()
 
         # variables: List[str] = self.examples.columns
         variables: List[str] = [
@@ -96,7 +93,6 @@ class EntropyTreeLearner:
             categorical_encoding="Enum"  # Native handling of categorical features
         )
         
-        # self.domains = constructor.anuta.domains
         self.domains = {}
         for varname in variables:
             if varname in self.categoricals: 
@@ -110,7 +106,7 @@ class EntropyTreeLearner:
         self.dtypes = {varname: t for varname, t in self.examples.types.items()}
         self.trees: Dict[str, List[H2ORandomForestEstimator]] = defaultdict(list)
         self.learned_rules: Set[str] = set()
-        pprint(self.domains)
+        # # pprint(self.domains)
         pprint(self.dtypes)
     
     def learn(self):
@@ -131,7 +127,11 @@ class EntropyTreeLearner:
                 model_id = f"{target}_tree_{i+1}"
                 params['model_id'] = model_id
                 dtree = H2ORandomForestEstimator(**params)
-                dtree.train(x=list(features), y=target, training_frame=self.examples)  
+                try:
+                    dtree.train(x=list(features), y=target, training_frame=self.examples)  
+                except Exception as e:
+                    log.error(f"Failed to train tree for {target} with features {features}: {e}")
+                    exit(1)
                 self.trees[target].append(dtree)
                 print(f"... Trained {treeid}/{total_trees} ({treeid/total_trees:.1%}) trees ({target=}).", end='\r')
                 treeid += 1
@@ -393,15 +393,12 @@ class XgboostTreeLearner:
             self.num_examples = 'all'
             
         self.dataset = constructor.label
-        match constructor.label:
-            case 'cidds':
-                constructor: Cidds001 = constructor
-                self.examples = constructor.df.copy()
-                self.examples[constructor.categoricals] = \
-                    self.examples[constructor.categoricals].astype('category')
-                self.categoricals = constructor.categoricals
-            case _:
-                raise ValueError(f"Unsupported constructor: {constructor.label}")
+        assert self.dataset in ['cidds', 'yatesbury'], \
+            f"Unsupported dataset: {self.dataset}. Supported datasets: ['cidds', 'yatesbury']"
+        self.examples = constructor.df.copy()
+        self.examples[constructor.categoricals] = \
+            self.examples[constructor.categoricals].astype('category')
+        self.categoricals = constructor.categoricals
         
         variables: List[str] = [
             var for var in self.examples.columns
@@ -466,7 +463,7 @@ class XgboostTreeLearner:
         self.trees: Dict[str, List[XGBClassifier|XGBRegressor]] = defaultdict(list)
         self.label_encoders: Dict[str, LabelEncoder] = {}
         self.learned_rules: Set[str] = set()
-        pprint(self.domains)
+        # pprint(self.domains)
         pprint(self.dtypes)
     
     def learn(self):
@@ -814,15 +811,12 @@ class LightGbmTreeLearner:
             self.num_examples = 'all'
             
         self.dataset = constructor.label
-        match constructor.label:
-            case 'cidds':
-                constructor: Cidds001 = constructor
-                self.examples = constructor.df.copy()
-                self.examples[constructor.categoricals] = \
-                    self.examples[constructor.categoricals].astype('category')
-                self.categoricals = constructor.categoricals
-            case _:
-                raise ValueError(f"Unsupported constructor: {constructor.label}")
+        assert self.dataset in ['cidds', 'yatesbury'], \
+            f"Unsupported dataset: {self.dataset}. Supported datasets: ['cidds', 'yatesbury']"
+        self.examples = constructor.df.copy()
+        self.examples[constructor.categoricals] = \
+            self.examples[constructor.categoricals].astype('category')
+        self.categoricals = constructor.categoricals
         
         variables: List[str] = [
             var for var in self.examples.columns
@@ -890,7 +884,7 @@ class LightGbmTreeLearner:
         self.trees: Dict[str, List[Booster]] = defaultdict(list)
         self.label_encoders: Dict[str, LabelEncoder] = {}
         self.learned_rules: Set[str] = set()
-        pprint(self.domains)
+        # # pprint(self.domains)
         pprint(self.dtypes)
         
     def learn(self):
