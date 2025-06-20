@@ -22,13 +22,23 @@ from anuta.known import *
 from anuta.utils import log, to_big_camelcase
 
 
-def get_featuregroups(variables: List[str]) -> Dict[str, List[Tuple[str, ...]]]:
+def get_featuregroups(df: pd.DataFrame) -> Dict[str, List[Tuple[str, ...]]]:
     """Generate all feature groups for the given variables."""
     featuregroups = defaultdict(list)
+    variables = list(df.columns)
     for target in variables:
+        if len(df[target].unique()) <= 1:
+            # Skip targets with only one unique value
+            continue
         features = [v for v in variables if v != target]
         for n in range(1, len(features)+1):
-            featuregroups[target] += itertools.combinations(features, n)
+            _featuregroup = itertools.combinations(features, n)
+            featuregroup = []
+            for features in _featuregroup:
+                if len(df[features].unique()) > 1:
+                    # Only include feature groups with more than one unique value
+                    featuregroup.append(features)
+            featuregroups[target] += featuregroup
     return featuregroups
 
 class EntropyTreeLearner:
@@ -60,14 +70,7 @@ class EntropyTreeLearner:
             # if var in self.categoricals
             # if var in cidds_numericals
         ]
-        self.featuregroups = defaultdict(list)
-        for target in variables:
-        # for target in self.categoricals:
-            features = [v for v in variables if v != target]
-            # self.featuregroups[target] = [features]
-            for n in range(1, len(features)+1):
-                self.featuregroups[target] += [
-                    list(combo) for combo in itertools.combinations(features, n)]
+        self.featuregroups = get_featuregroups(self.examples)
         
         self.model_configs = {}
         self.model_configs['classification'] = dict(
@@ -404,14 +407,7 @@ class XgboostTreeLearner:
             var for var in self.examples.columns
             # if var in self.categoricals
         ] 
-        self.featuregroups = defaultdict(list)
-        for target in variables:
-        # for target in self.categoricals:
-            features = [v for v in variables if v != target]
-            # self.featuregroups[target] = [features]
-            for n in range(1, len(features)+1):
-                self.featuregroups[target] += [
-                    list(combo) for combo in itertools.combinations(features, n)]
+        self.featuregroups = get_featuregroups(self.examples)
         
         common_config = dict(
                 min_child_weight=0,    # small → allows fine splits
@@ -822,14 +818,7 @@ class LightGbmTreeLearner:
             var for var in self.examples.columns
             # if var in self.categoricals
         ] 
-        self.featuregroups = defaultdict(list)
-        for target in variables:
-        # for target in self.categoricals:
-            features = [v for v in variables if v != target]
-            # self.featuregroups[target] = [features]
-            for n in range(1, len(features)+1):
-                self.featuregroups[target] += [
-                    list(combo) for combo in itertools.combinations(features, n)]
+        self.featuregroups = get_featuregroups(self.examples)
         
         common_config = {
             'n_estimators': 1,
