@@ -117,7 +117,7 @@ class EntropyTreeLearner:
     def learn(self):
         total_trees = len(self.featuregroups) * \
             len(self.featuregroups[list(self.featuregroups)[0]])
-        log.info(f"Learning {total_trees} trees from {len(self.examples)} examples.")
+        log.info(f"Learning {total_trees} groups of trees from {len(self.examples)} examples.")
         
         start = perf_counter()
         treeid = 1
@@ -467,7 +467,7 @@ class XgboostTreeLearner:
     def learn(self):
         total_trees = len(self.featuregroups) * \
             len(self.featuregroups[list(self.featuregroups)[0]])
-        log.info(f"Learning {total_trees} trees from {len(self.examples)} examples.")
+        log.info(f"Learning {total_trees} groups of trees from {len(self.examples)} examples.")
         
         start = perf_counter()
         treeid = 1
@@ -881,7 +881,7 @@ class LightGbmTreeLearner:
     def learn(self):
         total_trees = len(self.featuregroups) * \
             len(self.featuregroups[list(self.featuregroups)[0]])
-        log.info(f"Learning {total_trees} trees from {len(self.examples)} examples.")
+        log.info(f"Learning {total_trees} groups of trees from {len(self.examples)} examples.")
         
         start = perf_counter()
         treeid = 1
