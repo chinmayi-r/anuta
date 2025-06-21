@@ -64,6 +64,8 @@ if __name__ == '__main__':
             constructor = Cicids2017(FLAGS.data)
         case 'yatesbury':
             constructor = Yatesbury(FLAGS.data)
+        case 'metadc':
+            constructor = Millisampler(FLAGS.data)
         case _:
             raise ValueError(f"Unknown dataset: {dataset}")
     
@@ -100,7 +102,8 @@ if __name__ == '__main__':
         log.info(f"Learning from {limit} examples in {FLAGS.data}")
         log.info(f"Domain counting enabled: {FLAGS.config.DOMAIN_COUNTING}")
         log.info(f"Using baseline method: {FLAGS.baseline}")
-        log.info(f"Reference data: {refdata}")     
+        if refconstructor:
+            log.info(f"Reference data: {refdata}")     
         
         main(constructor, refconstructor, limit)
 

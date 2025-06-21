@@ -22,7 +22,7 @@ from anuta.known import *
 from anuta.utils import log, to_big_camelcase
 
 
-def get_featuregroups(df: pd.DataFrame) -> Dict[str, List[Tuple[str, ...]]]:
+def get_featuregroups(df: pd.DataFrame, feature_marker: str='') -> Dict[str, List[Tuple[str, ...]]]:
     """Generate all feature groups for the given variables."""
     featuregroups = defaultdict(list)
     variables = list(df.columns)
@@ -30,7 +30,7 @@ def get_featuregroups(df: pd.DataFrame) -> Dict[str, List[Tuple[str, ...]]]:
         if len(df[target].unique()) <= 1:
             # Skip targets with only one unique value
             continue
-        features = [v for v in variables if v != target]
+        features = [v for v in variables if v != target and feature_marker in v]
         for n in range(1, len(features)+1):
             _featuregroup = [list(combo) for combo in itertools.combinations(features, n)]
             featuregroup = []
@@ -57,8 +57,8 @@ class EntropyTreeLearner:
             self.num_examples = 'all'
             
         self.dataset = constructor.label
-        assert self.dataset in ['cidds', 'yatesbury'], \
-            f"Unsupported dataset: {self.dataset}. Supported datasets: ['cidds', 'yatesbury']"
+        assert self.dataset in ['cidds', 'yatesbury', 'metadc'], \
+            f"Unsupported dataset: {self.dataset}. Supported datasets: ['cidds', 'yatesbury', 'metadc']"
         constructor: Cidds001 = constructor
         constructor.df[constructor.categoricals] = \
             constructor.df[constructor.categoricals].astype('category')
@@ -72,7 +72,7 @@ class EntropyTreeLearner:
             # if var in self.categoricals
             # if var in cidds_numericals
         ]
-        self.featuregroups = get_featuregroups(constructor.df)
+        self.featuregroups = get_featuregroups(constructor.df, constructor.feature_marker)
         
         self.model_configs = {}
         self.model_configs['classification'] = dict(
@@ -104,8 +104,8 @@ class EntropyTreeLearner:
                 self.domains[varname] = sorted(list(constructor.df[varname].unique()))
             else:
                 self.domains[varname] = (
-                    self.examples[varname].min(), 
-                    self.examples[varname].max()
+                    constructor.df[varname].min().item, 
+                    constructor.df[varname].max().item
                 )
         #* dTypes: {'int', 'real', 'enum'(categorical)}
         self.dtypes = {varname: t for varname, t in self.examples.types.items()}
@@ -398,8 +398,8 @@ class XgboostTreeLearner:
             self.num_examples = 'all'
             
         self.dataset = constructor.label
-        assert self.dataset in ['cidds', 'yatesbury'], \
-            f"Unsupported dataset: {self.dataset}. Supported datasets: ['cidds', 'yatesbury']"
+        assert self.dataset in ['cidds', 'yatesbury', 'metadc'], \
+            f"Unsupported dataset: {self.dataset}. Supported datasets: ['cidds', 'yatesbury', 'metadc']"
         self.examples = constructor.df.copy()
         self.examples[constructor.categoricals] = \
             self.examples[constructor.categoricals].astype('category')
@@ -409,7 +409,7 @@ class XgboostTreeLearner:
             var for var in self.examples.columns
             # if var in self.categoricals
         ] 
-        self.featuregroups = get_featuregroups(self.examples)
+        self.featuregroups = get_featuregroups(self.examples, constructor.feature_marker)
         
         common_config = dict(
                 min_child_weight=0,    # small → allows fine splits
@@ -809,8 +809,8 @@ class LightGbmTreeLearner:
             self.num_examples = 'all'
             
         self.dataset = constructor.label
-        assert self.dataset in ['cidds', 'yatesbury'], \
-            f"Unsupported dataset: {self.dataset}. Supported datasets: ['cidds', 'yatesbury']"
+        assert self.dataset in ['cidds', 'yatesbury', 'metadc'], \
+            f"Unsupported dataset: {self.dataset}. Supported datasets: ['cidds', 'yatesbury', 'metadc']"
         self.examples = constructor.df.copy()
         self.examples[constructor.categoricals] = \
             self.examples[constructor.categoricals].astype('category')
@@ -820,7 +820,7 @@ class LightGbmTreeLearner:
             var for var in self.examples.columns
             # if var in self.categoricals
         ] 
-        self.featuregroups = get_featuregroups(self.examples)
+        self.featuregroups = get_featuregroups(self.examples, constructor.feature_marker)
         
         common_config = {
             'n_estimators': 1,
