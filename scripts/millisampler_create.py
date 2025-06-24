@@ -42,13 +42,22 @@ if __name__ == '__main__':
     traces = glob(f"data/Millisampler-data/day1-h1-zip/*")
     print(f"{len(traces)=}")
     
-    rack_range = range(0, 40) #* Training
-    # rack_range = range(150, 170) #* Testing
-
+    istest = False
+    # rack_range = range(0, 150) #* Training
+    rack_range = [156, 158, 160, 172, 177, 178, 179, 181, 184, 191] #* Testing (10 racks)
+    # rack_range = range(0, 17000) #* All
     millidata = []
+    rackids = set()
+    numracks_limit = 500
     for trace in tqdm(traces):
         rackid = int(trace.split('rackId_')[-1].split('_')[0])
-        if rackid not in rack_range: continue
+        if istest and rackid not in rack_range: continue
+        if not istest and rackid in rack_range: continue
+        
+        rackids.add(rackid)
+        if len(rackids) > numracks_limit:
+            print(f"Reached the limit of {numracks_limit} racks.")
+            break
         
         f = gzip.open(trace)
         record = json.loads(f.read())
@@ -93,4 +102,11 @@ if __name__ == '__main__':
     millidf = millidf.sort_values(by=['rackid', 'hostid'])
     millidf = millidf.reset_index(drop=True)
     print(f"Aggregated data shape: {millidf.shape}")
-    millidf.to_csv(f"data/metadc_{rack_range.start}-{rack_range.stop}.csv", index=False)
+    
+    label = 'test' if istest else 'train'
+    label += f"_{len(rackids)}racks"
+    millidf.to_csv(f"data/metadc_{label}.csv", index=False)
+    
+    rackids = sorted(list(rackids))
+    print(f"{len(rackids)} racks")
+    # print(f"Rack IDs: \n{rackids}")

@@ -43,12 +43,9 @@ def get_featuregroups(df: pd.DataFrame, feature_marker: str='') -> Dict[str, Lis
             featuregroups[target] += featuregroup
     return featuregroups
 
-class EntropyTreeLearner:
-    """Tree learner based on information gain, using H2O's implementation."""
+class TreeLearner(object):
+    """Base class for tree learners."""
     def __init__(self, constructor: Constructor, limit=None):
-        h2o.init(nthreads=-1)  # -1 = use all available cores
-        h2o.no_progress()  # Disables all progress bar output
-        
         if limit and limit < constructor.df.shape[0]:
             log.info(f"Limiting dataset to {limit} examples.")
             constructor.df = constructor.df.sample(n=limit, random_state=42)
@@ -59,26 +56,38 @@ class EntropyTreeLearner:
         self.dataset = constructor.label
         assert self.dataset in ['cidds', 'yatesbury', 'metadc'], \
             f"Unsupported dataset: {self.dataset}. Supported datasets: ['cidds', 'yatesbury', 'metadc']"
-        constructor: Cidds001 = constructor
-        constructor.df[constructor.categoricals] = \
-            constructor.df[constructor.categoricals].astype('category')
-        self.examples: h2o.H2OFrame = h2o.H2OFrame(constructor.df)
+        self.examples = constructor.df.copy()
+        self.examples[constructor.categoricals] = \
+            self.examples[constructor.categoricals].astype('category')
         self.categoricals = constructor.categoricals
-        self.examples[self.categoricals] = self.examples[self.categoricals].asfactor()
-
-        # variables: List[str] = self.examples.columns
-        variables: List[str] = [
-            var for var in self.examples.columns 
-            # if var in self.categoricals
-            # if var in cidds_numericals
-        ]
-        self.featuregroups = get_featuregroups(constructor.df, constructor.feature_marker)
         
+        self.variables: List[str] = [
+            var for var in self.examples.columns
+            # if var in self.categoricals
+        ] 
+        self.featuregroups = get_featuregroups(self.examples, constructor.feature_marker)
+        self.total_treegroups = len(self.examples.columns) * \
+            len(self.featuregroups[list(self.featuregroups)[0]])
+        
+    def learn(self):
+        raise NotImplementedError("Subclasses should implement this method.")
+
+class EntropyTreeLearner(TreeLearner):
+    """Tree learner based on information gain, using H2O's implementation."""
+    def __init__(self, constructor: Constructor, limit=None):
+        super().__init__(constructor, limit)
+        h2o.init(nthreads=-1)  # -1 = use all available cores
+        h2o.no_progress()  # Disables all progress bar output
+            
+        self.examples: h2o.H2OFrame = h2o.H2OFrame(constructor.df)
+        if self.categoricals:
+            self.examples[self.categoricals] = self.examples[self.categoricals].asfactor()
+
         self.model_configs = {}
         self.model_configs['classification'] = dict(
             # model_id="clf_tree",
             ntrees=1,                 # Build only one tree
-            max_depth=len(variables),
+            max_depth=len(self.variables),
             min_rows=1,               # Minimum number of observations in a leaf
             min_split_improvement=1e-6,
             sample_rate=1.0,          # Use all rows
@@ -89,7 +98,7 @@ class EntropyTreeLearner:
         self.model_configs['regression'] = dict(
             # model_id="reg_tree",
             ntrees=1,                 # Build only one tree
-            max_depth=len(variables)//2, #TODO: To be tuned
+            max_depth=len(self.variables)//2, #TODO: To be tuned
             #* Minimum number of observations in a leaf)
             min_rows=100,             #TODO: To be tuned
             sample_rate=1.0,          # Use all rows
@@ -99,7 +108,7 @@ class EntropyTreeLearner:
         )
         
         self.domains = {}
-        for varname in variables:
+        for varname in self.variables:
             if varname in self.categoricals: 
                 self.domains[varname] = sorted(list(constructor.df[varname].unique()))
             else:
@@ -115,9 +124,7 @@ class EntropyTreeLearner:
         pprint(self.dtypes)
     
     def learn(self):
-        total_trees = len(self.featuregroups) * \
-            len(self.featuregroups[list(self.featuregroups)[0]])
-        log.info(f"Learning {total_trees} groups of trees from {len(self.examples)} examples.")
+        log.info(f"Learning {self.total_treegroups} groups of trees from {len(self.examples)} examples.")
         
         start = perf_counter()
         treeid = 1
@@ -138,15 +145,15 @@ class EntropyTreeLearner:
                     log.error(f"Failed to train tree for {target} with features {features}: {e}")
                     exit(1)
                 self.trees[target].append(dtree)
-                print(f"... Trained {treeid}/{total_trees} ({treeid/total_trees:.1%}) tree groups ({target=}).", end='\r')
+                print(f"... Trained {treeid}/{self.total_treegroups} ({treeid/self.total_treegroups:.1%}) tree groups ({target=}).", end='\r')
                 treeid += 1
         end = perf_counter()
-        log.info(f"Training {total_trees} trees took {end - start:.2f} seconds.")
+        log.info(f"Training {self.total_treegroups} tree groups took {end - start:.2f} seconds.")
         
         start = perf_counter()
         self.learned_rules = self.extract_rules_from_treepaths()
         end = perf_counter()
-        log.info(f"Learned {len(self.learned_rules)} rules from {total_trees} trees.")
+        log.info(f"Learned {len(self.learned_rules)} rules from {self.total_treegroups} trees.")
         log.info(f"Extracting rules took {end - start:.2f} seconds.")
         
         assumptions = set()
@@ -387,29 +394,10 @@ class EntropyTreeLearner:
         return treepaths
 
 
-class XgboostTreeLearner:
+class XgboostTreeLearner(TreeLearner):
     """Tree learner based on XGBoost."""
     def __init__(self, constructor: Constructor, limit=None):
-        if limit and limit < constructor.df.shape[0]:
-            log.info(f"Limiting dataset to {limit} examples.")
-            constructor.df = constructor.df.sample(n=limit, random_state=42)
-            self.num_examples = limit
-        else:
-            self.num_examples = 'all'
-            
-        self.dataset = constructor.label
-        assert self.dataset in ['cidds', 'yatesbury', 'metadc'], \
-            f"Unsupported dataset: {self.dataset}. Supported datasets: ['cidds', 'yatesbury', 'metadc']"
-        self.examples = constructor.df.copy()
-        self.examples[constructor.categoricals] = \
-            self.examples[constructor.categoricals].astype('category')
-        self.categoricals = constructor.categoricals
-        
-        variables: List[str] = [
-            var for var in self.examples.columns
-            # if var in self.categoricals
-        ] 
-        self.featuregroups = get_featuregroups(self.examples, constructor.feature_marker)
+        super().__init__(constructor, limit)
         
         common_config = dict(
                 min_child_weight=0,    # small → allows fine splits
@@ -426,18 +414,18 @@ class XgboostTreeLearner:
         self.model_configs = {}
         self.model_configs['classification'] = dict(
             objective = 'multi:softprob',
-            max_depth=len(variables), # high enough to split until pure
+            max_depth=len(self.variables), # high enough to split until pure
             **common_config,
         )
         self.model_configs['regression'] = dict(
             objective = 'reg:squarederror',
-            max_depth=len(variables)//2, #TODO: To be tuned
+            max_depth=len(self.variables)//2, #TODO: To be tuned
             **common_config,
         )
                 
         #TODO: Unify `Domain`
         self.domains = {}
-        for varname in variables:
+        for varname in self.variables:
             if varname in self.categoricals: 
                 self.domains[varname] = sorted(
                     [n.item() for n in constructor.df[varname].unique()])
@@ -465,9 +453,7 @@ class XgboostTreeLearner:
         pprint(self.dtypes)
     
     def learn(self):
-        total_trees = len(self.featuregroups) * \
-            len(self.featuregroups[list(self.featuregroups)[0]])
-        log.info(f"Learning {total_trees} groups of trees from {len(self.examples)} examples.")
+        log.info(f"Learning {self.total_treegroups} groups of trees from {len(self.examples)} examples.")
         
         start = perf_counter()
         treeid = 1
@@ -493,15 +479,15 @@ class XgboostTreeLearner:
                 X = self.examples[list(features)]
                 model.fit(X, y)
                 self.trees[target].append(model)
-                print(f"... Trained {treeid}/{total_trees} ({treeid/total_trees:.1%}) tree groups ({target=}).", end='\r')
+                print(f"... Trained {treeid}/{self.total_treegroups} ({treeid/self.total_treegroups:.1%}) tree groups ({target=}).", end='\r')
                 treeid += 1
         end = perf_counter()
-        log.info(f"Training {total_trees} trees took {end - start:.2f} seconds.")
+        log.info(f"Training {self.total_treegroups} tree groups took {end - start:.2f} seconds.")
         
         start = perf_counter()
         self.learned_rules = self.extract_rules_from_pathconditions()
         end = perf_counter()
-        log.info(f"Learned {len(self.learned_rules)} rules from {total_trees} trees.")
+        log.info(f"Learned {len(self.learned_rules)} rules from {self.total_treegroups} trees.")
         log.info(f"Extracting rules took {end - start:.2f} seconds.")
         
         assumptions = set()
@@ -619,7 +605,7 @@ class XgboostTreeLearner:
             for treeidx, paths in enumerate(all_treepaths):
                 xgbtree: XGBClassifier|XGBRegressor = self.trees[target][treeidx]
                 n_classes = getattr(xgbtree, 'n_classes_', 1)
-                useless_splits = XgboostTreeLearner.get_useless_splits(xgbtree)
+                useless_splits = [] # XgboostTreeLearner.get_useless_splits(xgbtree)
                 label_map = dict(zip(encoder.transform(encoder.classes_), encoder.classes_)) \
                     if encoder else {}
                 
@@ -798,29 +784,10 @@ class XgboostTreeLearner:
 
         return paths
     
-class LightGbmTreeLearner:
+class LightGbmTreeLearner(TreeLearner):
     """Tree learner based on LightGBM."""
     def __init__(self, constructor: Constructor, limit=None):
-        if limit and limit < constructor.df.shape[0]:
-            log.info(f"Limiting dataset to {limit} examples.")
-            constructor.df = constructor.df.sample(n=limit, random_state=42)
-            self.num_examples = limit
-        else:
-            self.num_examples = 'all'
-            
-        self.dataset = constructor.label
-        assert self.dataset in ['cidds', 'yatesbury', 'metadc'], \
-            f"Unsupported dataset: {self.dataset}. Supported datasets: ['cidds', 'yatesbury', 'metadc']"
-        self.examples = constructor.df.copy()
-        self.examples[constructor.categoricals] = \
-            self.examples[constructor.categoricals].astype('category')
-        self.categoricals = constructor.categoricals
-        
-        variables: List[str] = [
-            var for var in self.examples.columns
-            # if var in self.categoricals
-        ] 
-        self.featuregroups = get_featuregroups(self.examples, constructor.feature_marker)
+        super().__init__(constructor, limit)
         
         common_config = {
             'n_estimators': 1,
@@ -840,18 +807,18 @@ class LightGbmTreeLearner:
         self.model_configs['classification'] = dict(
             objective='multiclass',
             metric='multi_logloss',
-            max_depth=len(variables), # high enough to split until pure
+            max_depth=len(self.variables), # high enough to split until pure
             **common_config,
         )
         self.model_configs['regression'] = dict(
             objective='regression',
             metric='l2',
-            max_depth=len(variables)//2, #TODO: To be tuned
+            max_depth=len(self.variables)//2, #TODO: To be tuned
             **common_config,
         )
         
         self.domains = {}
-        for varname in variables:
+        for varname in self.variables:
             if varname in self.categoricals: 
                 self.domains[varname] = sorted(
                     [n.item() for n in constructor.df[varname].unique()])
@@ -879,9 +846,7 @@ class LightGbmTreeLearner:
         pprint(self.dtypes)
         
     def learn(self):
-        total_trees = len(self.featuregroups) * \
-            len(self.featuregroups[list(self.featuregroups)[0]])
-        log.info(f"Learning {total_trees} groups of trees from {len(self.examples)} examples.")
+        log.info(f"Learning {self.total_treegroups} groups of trees from {len(self.examples)} examples.")
         
         start = perf_counter()
         treeid = 1
@@ -909,16 +874,16 @@ class LightGbmTreeLearner:
                 lgb_data = lgb.Dataset(X, label=y, categorical_feature=categorical_features)
                 model = lgb.train(params, lgb_data, num_boost_round=1)
                 self.trees[target].append(model)
-                print(f"... Trained {treeid}/{total_trees} ({treeid/total_trees:.1%}) tree groups ({target=}).", end='\r')
+                print(f"... Trained {treeid}/{self.total_treegroups} ({treeid/self.total_treegroups:.1%}) tree groups ({target=}).", end='\r')
                 treeid += 1
         end = perf_counter()
-        log.info(f"Training {total_trees} trees took {end - start:.2f} seconds.")
+        log.info(f"Training {self.total_treegroups} tree groups took {end - start:.2f} seconds.")
         start = perf_counter()
         
         start = perf_counter()
         self.learned_rules = self.extract_rules_from_pathconditions()
         end = perf_counter()
-        log.info(f"Learned {len(self.learned_rules)} rules from {total_trees} trees.")
+        log.info(f"Learned {len(self.learned_rules)} rules from {self.total_treegroups} trees.")
         log.info(f"Extracting rules took {end - start:.2f} seconds.")
         
         assumptions = set()
