@@ -25,7 +25,6 @@ def aggregate_timeseries(data, window, stride, func, integer=True):
     """
     if len(data) < window:
         raise ValueError("The length of the data must be greater than or equal to the window size.")
-
     #* Cut the residual out
     data = data[: len(data) - (len(data)%window)]
     aggregated = []
@@ -42,17 +41,19 @@ if __name__ == '__main__':
     traces = glob(f"data/Millisampler-data/day1-h1-zip/*")
     print(f"{len(traces)=}")
     
-    istest = False
+    istest = True
     # rack_range = range(0, 150) #* Training
-    rack_range = [156, 158, 160, 172, 177, 178, 179, 181, 184, 191] #* Testing (10 racks)
+    test_range = [156, 158, 160, 172, 177, 178, 179, 181, 184, 191] #* Testing (10 racks)
     # rack_range = range(0, 17000) #* All
+    # test_range = [200]
     millidata = []
     rackids = set()
     numracks_limit = 500
+    hostids = list()
     for trace in tqdm(traces):
         rackid = int(trace.split('rackId_')[-1].split('_')[0])
-        if istest and rackid not in rack_range: continue
-        if not istest and rackid in rack_range: continue
+        if istest and rackid not in test_range: continue
+        if not istest and rackid in test_range: continue
         
         rackids.add(rackid)
         if len(rackids) > numracks_limit:
@@ -63,6 +64,7 @@ if __name__ == '__main__':
         record = json.loads(f.read())
         if not 'ingressBytes' in record: continue
         
+        hostids.append(record['server_hostname'])
         aggregates = {
             'rackid': rackid,
             'hostid': record['server_hostname'],
@@ -95,6 +97,7 @@ if __name__ == '__main__':
             assert total_bytes == aggregate['IngressBytesAgg'], f"Aggregation {i}: {total_bytes=} ≠ {aggregate['IngressBytesAgg']}"
             millidata.append(aggregate)
     
+    print(f"Processed {len(hostids)} ({len(set(hostids))}) hosts.")
     millidf = pd.DataFrame.from_dict(millidata)
     millidf = millidf.apply(pd.to_numeric, errors='coerce')
     millidf = millidf.fillna(0)  # Fill NaN values with 0
