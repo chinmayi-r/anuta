@@ -68,7 +68,7 @@ class TreeLearner(object):
         self.features = [var for var in self.variables if constructor.feature_marker in var]
         self.featuregroups = get_featuregroups(self.examples, constructor.feature_marker)
         self.total_treegroups = len(self.examples.columns) * \
-            len(self.featuregroups[list(self.featuregroups.values())[0]])
+            len(list(self.featuregroups.values())[0])  # Total number of tree groups to learn
         
     def learn(self):
         raise NotImplementedError("Subclasses should implement this method.")
