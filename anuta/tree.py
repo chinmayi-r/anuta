@@ -64,7 +64,8 @@ class TreeLearner(object):
         self.variables: List[str] = [
             var for var in self.examples.columns
             # if var in self.categoricals
-        ] 
+        ]
+        self.features = [var for var in self.variables if constructor.feature_marker in var]
         self.featuregroups = get_featuregroups(self.examples, constructor.feature_marker)
         self.total_treegroups = len(self.examples.columns) * \
             len(self.featuregroups[list(self.featuregroups)[0]])
@@ -87,7 +88,7 @@ class EntropyTreeLearner(TreeLearner):
         self.model_configs['classification'] = dict(
             # model_id="clf_tree",
             ntrees=1,                 # Build only one tree
-            max_depth=len(self.variables),
+            max_depth=len(self.features),
             min_rows=1,               # Minimum number of observations in a leaf
             min_split_improvement=1e-6,
             sample_rate=1.0,          # Use all rows
@@ -98,7 +99,7 @@ class EntropyTreeLearner(TreeLearner):
         self.model_configs['regression'] = dict(
             # model_id="reg_tree",
             ntrees=1,                 # Build only one tree
-            max_depth=len(self.variables)//2, #TODO: To be tuned
+            max_depth=len(self.features)//2, #TODO: To be tuned
             #* Minimum number of observations in a leaf)
             min_rows=100,             #TODO: To be tuned
             sample_rate=1.0,          # Use all rows
@@ -113,8 +114,8 @@ class EntropyTreeLearner(TreeLearner):
                 self.domains[varname] = sorted(list(constructor.df[varname].unique()))
             else:
                 self.domains[varname] = (
-                    constructor.df[varname].min().item, 
-                    constructor.df[varname].max().item
+                    constructor.df[varname].min().item(), 
+                    constructor.df[varname].max().item()
                 )
         #* dTypes: {'int', 'real', 'enum'(categorical)}
         self.dtypes = {varname: t for varname, t in self.examples.types.items()}
@@ -414,12 +415,12 @@ class XgboostTreeLearner(TreeLearner):
         self.model_configs = {}
         self.model_configs['classification'] = dict(
             objective = 'multi:softprob',
-            max_depth=len(self.variables), # high enough to split until pure
+            max_depth=len(self.features), # high enough to split until pure
             **common_config,
         )
         self.model_configs['regression'] = dict(
             objective = 'reg:squarederror',
-            max_depth=len(self.variables)//2, #TODO: To be tuned
+            max_depth=len(self.features)//2, #TODO: To be tuned
             **common_config,
         )
                 
@@ -807,13 +808,13 @@ class LightGbmTreeLearner(TreeLearner):
         self.model_configs['classification'] = dict(
             objective='multiclass',
             metric='multi_logloss',
-            max_depth=len(self.variables), # high enough to split until pure
+            max_depth=len(self.features), # high enough to split until pure
             **common_config,
         )
         self.model_configs['regression'] = dict(
             objective='regression',
             metric='l2',
-            max_depth=len(self.variables)//2, #TODO: To be tuned
+            max_depth=len(self.features)//2, #TODO: To be tuned
             **common_config,
         )
         
