@@ -4,10 +4,18 @@ import json
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+import sys
 
 
 agg_window = 50
 agg_stride = agg_window
+ctx_len = 6 
+ctx_len -= 1 #* The aggregate itself is already counted as context
+key_cols = ['rackid', 'hostid']
+agg_cols = [
+    'IngressBytesAgg', 'EgressBytesAgg', 'InRxmitBytesAgg',
+    'OutRxmitBytesAgg', 'InCongestionBytesAgg', 'ConnectionsAgg'
+]
 
 def aggregate_timeseries(data, window, stride, func, integer=True):
     """
@@ -41,14 +49,15 @@ if __name__ == '__main__':
     traces = glob(f"data/Millisampler-data/day1-h1-zip/*")
     print(f"{len(traces)=}")
     
-    istest = True
+    istest = False if sys.argv[1] == 'train' else True
     # rack_range = range(0, 150) #* Training
     test_range = [156, 158, 160, 172, 177, 178, 179, 181, 184, 191] #* Testing (10 racks)
     # rack_range = range(0, 17000) #* All
     # test_range = [200]
     millidata = []
+    ctxdata = []
     rackids = set()
-    numracks_limit = 500
+    numracks_limit = 1e100
     hostids = list()
     for trace in tqdm(traces):
         rackid = int(trace.split('rackId_')[-1].split('_')[0])
@@ -87,28 +96,49 @@ if __name__ == '__main__':
         
         record_len = len(record['ingressBytes'])
         ingressbytes = record['ingressBytes'][: record_len - (record_len % agg_window)]
+        # Create context for aggregate keys
         for i, aggregate in enumerate(flattened):
-            start = i*agg_stride
+            start = i * agg_stride
             total_bytes = 0
-            for j, val in enumerate(ingressbytes[start: start+agg_window]):
-                key = f"IngressBytes{j}"
-                aggregate[key] = val
+            for j, val in enumerate(ingressbytes[start: start + agg_window]):
+                col = f"IngressBytes{j}"
+                aggregate[col] = val
                 total_bytes += val
             assert total_bytes == aggregate['IngressBytesAgg'], f"Aggregation {i}: {total_bytes=} ≠ {aggregate['IngressBytesAgg']}"
+
+            # Add context features
+            ctx = {}
+            for k in range(ctx_len, 0, -1):
+                if i - k < 0:
+                    prev_agg = {col: 0 for col in agg_cols}
+                else:
+                    prev_agg = flattened[i - k]
+                for col in agg_cols:
+                    name = col.replace('Agg', f'Ctx') + str(ctx_len - k)
+                    ctx[name] = prev_agg[col]
+            ctxdata.append(ctx)
             millidata.append(aggregate)
     
     print(f"Processed {len(hostids)} ({len(set(hostids))}) hosts.")
     millidf = pd.DataFrame.from_dict(millidata)
+    ctxdf = pd.DataFrame.from_dict(ctxdata)
+    keydf = pd.DataFrame(millidf[key_cols])
+    millidf = millidf.drop(columns=key_cols)
+    print(f"Aggregation shape: {millidf.shape}, context shape: {ctxdf.shape}")
+    millidf = pd.concat([keydf, ctxdf, millidf], axis=1)
+    
     millidf = millidf.apply(pd.to_numeric, errors='coerce')
     millidf = millidf.fillna(0)  # Fill NaN values with 0
     millidf = millidf.clip(lower=0)  # Ensure no negative values
-    millidf = millidf.sort_values(by=['rackid', 'hostid'])
+    millidf = millidf.sort_values(by=['rackid', 'hostid'], kind='stable')
     millidf = millidf.reset_index(drop=True)
     print(f"Aggregated data shape: {millidf.shape}")
     
     label = 'test' if istest else 'train'
-    label += f"_{len(rackids)}racks"
-    millidf.to_csv(f"data/metadc_{label}.csv", index=False)
+    label += f"_{len(rackids)}racks_{ctx_len}ctx"
+    savepath = f"data/metadc_{label}.csv"
+    millidf.to_csv(savepath, index=False)
+    print(f"Saved aggregated data to {savepath}")
     
     rackids = sorted(list(rackids))
     print(f"{len(rackids)} racks")
