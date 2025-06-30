@@ -85,6 +85,9 @@ class EntropyTreeLearner(TreeLearner):
             self.examples[self.categoricals] = self.examples[self.categoricals].asfactor()
 
         self.model_configs = {}
+        num_examples = self.examples.shape[0]
+        min_rows = int(num_examples * 0.01) if num_examples > 100 else 1
+        log.info(f"Setting {min_rows=}.")
         self.model_configs['classification'] = dict(
             # model_id="clf_tree",
             ntrees=1,                 # Build only one tree

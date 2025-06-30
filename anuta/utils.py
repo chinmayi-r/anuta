@@ -34,10 +34,12 @@ def z3max(*args):
     return reduce(lambda a, b: z3.If(a >= b, a, b), args)
 z3evalmap = {'Eq': z3eq, 'Ne': z3ne, 'And': z3and, 'Or': z3or, 'Implies': z3implies, 'Equivalent': z3equiv, 'Max': z3max}
 
-for varname in cidds_categoricals:
+for varname in cidds_categoricals + cidds_ints:
     z3evalmap[varname] = z3.Int(varname)
-for varname in cidds_numericals:
+for varname in cidds_floats:
     z3evalmap[varname] = z3.Real(varname)
+for varname in metadc_ints:
+    z3evalmap[varname] = z3.Int(varname)
 #TODO: Add vars from other datasets
 
 def transform_consequent(expression):

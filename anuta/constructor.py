@@ -439,7 +439,10 @@ class Millisampler(Constructor):
         self.label = 'metadc'
         log.info(f"Loading data from {filepath}")
         self.df: pd.DataFrame = pd.read_csv(filepath)
-        self.df.drop(columns=['rackid', 'hostid'], inplace=True)
+        todrop = ['rackid', 'hostid']
+        for col in self.df.columns:
+            if col in todrop:
+                self.df.drop(columns=[col], inplace=True)
         variables = list(self.df.columns)
         #* All variables are numerical, so we don't need to specify categoricals.
         self.categoricals = []

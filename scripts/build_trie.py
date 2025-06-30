@@ -13,7 +13,7 @@ import random
 
 from anuta.theory import Theory
 from anuta.utils import to_big_camelcase, z3evalmap
-from anuta.known import cidds_flag_map, cidds_proto_map, cidds_ip_map, cidds_ports, cidds_ints, cidds_reals
+from anuta.known import cidds_flag_map, cidds_proto_map, cidds_ip_map, cidds_ports, cidds_ints, cidds_floats
 
 
 ruletype = 'prefix'
@@ -90,7 +90,7 @@ def get_relevant_rules(df, columns, dataset, rules_sp):
                 #* Update the evalmap with vars.
                 if varname in cidds_ints:
                     evalmap[varname] = z3.Int(varname)
-                elif varname in cidds_reals:
+                elif varname in cidds_floats:
                     evalmap[varname] = z3.Real(varname)
             case 'cicids':
                 # if varname in constructor.anuta.domains:

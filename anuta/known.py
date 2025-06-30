@@ -22,6 +22,9 @@ known_ports = [
 ]
 UNINTERESTED_PORT = 60_000  # Default value for unknown ports
 
+#************************* Domain Knowledge begins *************************
+metadc_ints = ['IngressBytesAgg','EgressBytesAgg','InRxmitBytesAgg','OutRxmitBytesAgg','InCongestionBytesAgg','ConnectionsAgg','IngressBytes0','IngressBytes1','IngressBytes2','IngressBytes3','IngressBytes4','IngressBytes5','IngressBytes6','IngressBytes7','IngressBytes8','IngressBytes9','IngressBytes10','IngressBytes11','IngressBytes12','IngressBytes13','IngressBytes14','IngressBytes15','IngressBytes16','IngressBytes17','IngressBytes18','IngressBytes19','IngressBytes20','IngressBytes21','IngressBytes22','IngressBytes23','IngressBytes24','IngressBytes25','IngressBytes26','IngressBytes27','IngressBytes28','IngressBytes29','IngressBytes30','IngressBytes31','IngressBytes32','IngressBytes33','IngressBytes34','IngressBytes35','IngressBytes36','IngressBytes37','IngressBytes38','IngressBytes39','IngressBytes40','IngressBytes41','IngressBytes42','IngressBytes43','IngressBytes44','IngressBytes45','IngressBytes46','IngressBytes47','IngressBytes48','IngressBytes49']
+
 #************************ Yatesbury ********************
 yatesbury_categoricals = ["SrcIp", "DstIp", "SrcPt", "DstPt", 
                         "Proto", "FlowDir", "Decision", "FlowState", "Label"]
@@ -129,7 +132,7 @@ cidds_ports = [0, 3, 8, 11, 22, 25,
             #    8000, #* Seafile Server
                53, 67, 68, 80, 123, 137, 138, 443, 993, 8080]
 cidds_ints = ['Packets', 'Bytes', 'Flows'] + cidds_categoricals
-cidds_reals = ['Duration']
+cidds_floats = ['Duration']
 
 #* Map strings to integers
 cidds_ip_conversion = bidict({ip: i for i, ip in enumerate(cidds_ips)})
