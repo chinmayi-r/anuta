@@ -73,6 +73,7 @@ class Constructor(object):
 
 class Yatesbury(Constructor):
     def __init__(self, filepath) -> None:
+        super().__init__()
         self.label = 'yatesbury'
         log.info(f"Loading data from {filepath}")
         self.categoricals = yatesbury_categoricals
@@ -112,6 +113,7 @@ class Yatesbury(Constructor):
 
 class Cicids2017(Constructor):
     def __init__(self, filepath) -> None:
+        super().__init__()
         self.label = 'cicids'
         log.info(f"Loading data from {filepath}")
         #! This dataset has to be preprocessed (removed nan, inf, spaces in cols, etc.)
@@ -209,6 +211,7 @@ class Cicids2017(Constructor):
 
 class Netflix(Constructor):
     def __init__(self, filepath) -> None:
+        super().__init__()
         self.label = 'netflix'
         STRIDE = 2
         WINDOW = 3
@@ -317,6 +320,7 @@ class Netflix(Constructor):
         
 class Cidds001(Constructor):
     def __init__(self, filepath) -> None:
+        super().__init__()
         self.label = 'cidds'
         log.info(f"Loading data from {filepath}")
         self.df: pd.DataFrame = pd.read_csv(filepath).iloc[:, :11]
@@ -327,6 +331,7 @@ class Cidds001(Constructor):
         col_to_var = {col: to_big_camelcase(col) for col in self.df.columns}
         self.df.rename(columns=col_to_var, inplace=True)
         variables = list(self.df.columns)
+        self.feature_marker = ''
         
         #* Convert the Flags and Proto columns to integers        
         self.df['Flags'] = self.df['Flags'].apply(cidds_flag_map)
