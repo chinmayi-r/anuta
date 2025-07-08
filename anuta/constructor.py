@@ -62,6 +62,8 @@ class Constructor(object):
         self.label: str = None
         self.df: pd.DataFrame = None
         self.anuta: AnutaMilli | Anuta = None
+        self.categoricals: list[str] = []
+        self.feature_marker = ''
     
     def get_indexset_and_counter(
             self, df: pd.DataFrame,
@@ -69,8 +71,49 @@ class Constructor(object):
         ) -> tuple[dict[str, dict[str, np.ndarray]], dict[str, DomainCounter]]:
         pass
 
+class Yatesbury(Constructor):
+    def __init__(self, filepath) -> None:
+        super().__init__()
+        self.label = 'yatesbury'
+        log.info(f"Loading data from {filepath}")
+        self.categoricals = yatesbury_categoricals
+        self.categoricals.remove('Decision')
+        self.categoricals.remove('Label')
+        self.df = pd.read_csv(filepath)
+        allowed_cols = yatesbury_categoricals + yatesbury_numericals
+        
+        for col in self.df.columns:
+            #* Drop labels for now, since we aren't aiming to predict them 
+            #*  but rather help the models.
+            if col not in allowed_cols:
+                self.df.drop(columns=[col], inplace=True)
+        
+        self.df['SrcIp'] = self.df['SrcIp'].apply(yatesbury_ip_map)
+        self.df['DstIp'] = self.df['DstIp'].apply(yatesbury_ip_map)
+        self.df['FlowDir'] = self.df['FlowDir'].apply(yatesbury_direction_map)
+        self.df['Proto'] = self.df['Proto'].apply(yatesbury_proto_map)
+        # self.df['Decision'] = self.df['Decision'].apply(yatesbury_decision_map)
+        self.df['FlowState'] = self.df['FlowState'].apply(yatesbury_flowstate_map)
+        self.df = self.df.astype(int)
+        
+        domains = {}
+        for name in self.df.columns:
+            if name not in self.categoricals:
+                domains[name] = Domain(DomainType.NUMERICAL, 
+                                       Bounds(self.df[name].min().item(), 
+                                              self.df[name].max().item()), 
+                                       None)
+            else:
+                domains[name] = Domain(DomainType.CATEGORICAL, 
+                                       None, 
+                                       self.df[name].unique().tolist())
+        self.anuta = Anuta(list(self.df.columns), domains, constants={})
+        
+        return
+
 class Cicids2017(Constructor):
     def __init__(self, filepath) -> None:
+        super().__init__()
         self.label = 'cicids'
         log.info(f"Loading data from {filepath}")
         #! This dataset has to be preprocessed (removed nan, inf, spaces in cols, etc.)
@@ -89,11 +132,11 @@ class Cicids2017(Constructor):
         col_to_var = {col: to_big_camelcase(col, sep='_') for col in self.df.columns}
         self.df.rename(columns=col_to_var, inplace=True)
         variables = list(self.df.columns)
-        self.categorical = ['Protocol']
+        self.categoricals = ['Protocol']
         
         domains = {}
         for name in self.df.columns:
-            if name not in self.categorical:
+            if name not in self.categoricals:
                 domains[name] = Domain(DomainType.NUMERICAL, 
                                        Bounds(self.df[name].min().item(), 
                                               self.df[name].max().item()), 
@@ -127,7 +170,7 @@ class Cicids2017(Constructor):
         ) -> tuple[dict[str, dict[str, np.ndarray]], dict[str, DomainCounter]]:
         indexset = {}
         #^ dict[var: dict[val: array(indices)]] // Var -> {Distinct value -> indices}
-        for cat in self.categorical:
+        for cat in self.categoricals:
             # print(f"Processing {cat}")
             indices = df.groupby(by=cat).indices
             indexset[cat] = indices
@@ -168,6 +211,7 @@ class Cicids2017(Constructor):
 
 class Netflix(Constructor):
     def __init__(self, filepath) -> None:
+        super().__init__()
         self.label = 'netflix'
         STRIDE = 2
         WINDOW = 3
@@ -207,14 +251,14 @@ class Netflix(Constructor):
         col_to_var = {col: to_big_camelcase(col, sep='_') for col in self.df.columns}
         self.df.rename(columns=col_to_var, inplace=True)
         variables = list(self.df.columns)
-        self.categorical = []
+        self.categoricals = []
         for name in self.df.columns:
             if not any(keyword in name.lower() for keyword in ('seq', 'ack', 'len', 'ts')):
-                self.categorical.append(name)
+                self.categoricals.append(name)
         
         domains = {}
         for name in self.df.columns:
-            if name not in self.categorical:
+            if name not in self.categoricals:
                 domains[name] = Domain(DomainType.NUMERICAL, 
                                        Bounds(self.df[name].min().item(), 
                                               self.df[name].max().item()), 
@@ -248,7 +292,7 @@ class Netflix(Constructor):
         ) -> tuple[dict[str, dict[str, np.ndarray]], dict[str, DomainCounter]]:
         indexset = {}
         #^ dict[var: dict[val: array(indices)]] // Var -> {Distinct value -> indices}
-        for cat in self.categorical:
+        for cat in self.categoricals:
             # print(f"Processing {cat}")
             indices = df.groupby(by=cat).indices
             indexset[cat] = indices
@@ -276,6 +320,7 @@ class Netflix(Constructor):
         
 class Cidds001(Constructor):
     def __init__(self, filepath) -> None:
+        super().__init__()
         self.label = 'cidds'
         log.info(f"Loading data from {filepath}")
         self.df: pd.DataFrame = pd.read_csv(filepath).iloc[:, :11]
@@ -286,6 +331,7 @@ class Cidds001(Constructor):
         col_to_var = {col: to_big_camelcase(col) for col in self.df.columns}
         self.df.rename(columns=col_to_var, inplace=True)
         variables = list(self.df.columns)
+        self.feature_marker = ''
         
         #* Convert the Flags and Proto columns to integers        
         self.df['Flags'] = self.df['Flags'].apply(cidds_flag_map)
@@ -393,49 +439,71 @@ class Cidds001(Constructor):
         return indexset, fcount
         
 
-
 class Millisampler(Constructor):
-    def __init__(self, filepath: str) -> None:
-        boundsfile = f"./data/meta_bounds.json"
-        print(f"Loading data from {filepath}")
-        self.df = pd.read_csv(filepath)
-        
-        variables = []
+    def __init__(self, filepath) -> None:
+        self.label = 'metadc'
+        log.info(f"Loading data from {filepath}")
+        self.df: pd.DataFrame = pd.read_csv(filepath)
+        todrop = ['rackid', 'hostid']
         for col in self.df.columns:
-            if col not in ['server_hostname', 'window', 'stride']:
-                # if len(col.split('_')) > 1 and col.split('_')[1].isdigit(): continue
-                variables.append(col)
-        constants = {
-            'burst_threshold': round(2891883 / 7200), # round(0.5*metadf.ingressBytes_sampled.max().item()),
-        }
+            if col in todrop:
+                self.df.drop(columns=[col], inplace=True)
+        variables = list(self.df.columns)
+        #* All variables are numerical, so we don't need to specify categoricals.
+        self.categoricals = []
+        self.feature_marker = 'Agg'
         
-        canaries = {
-            'canary_max10': (0, self.df.ingressBytes_aggregate.max().item()),
-            #^ Max(u1, u2, ..., u10) == canary_max10
-            'canary_premise': (0, 1),
-            'canary_conclusion': (constants['burst_threshold']+1, constants['burst_threshold']+1),
-            #^ (canary_premise > 0) => (canary_max10 + 1 ≥ burst_threshold)
-        }
-        variables.extend(canaries.keys())
-
-        #* Load the bounds directly from the file
-        with open(boundsfile, 'r') as f:
-            bounds = json.load(f)
-            bounds = {k: Bounds(v[0], v[1]) for k, v in bounds.items()}
-        # bounds = {}
-        # for col in metadf.columns:
-        #     if col in ['server_hostname', 'window', 'stride']: 
-        #         continue
-        #     bounds[col] = Bounds(metadf[col].min().item(), metadf[col].max().item())
-        for n, c in constants.items():
-            bounds[n] = Bounds(c, c)
-        for n, c in canaries.items():
-            bounds[n] = Bounds(c[0], c[1])
-        
-        self.anuta = AnutaMilli(variables, bounds, constants, operators=[0, 1, 2])
-        pprint(self.anuta.variables)
-        pprint(self.anuta.constants)
-        pprint(self.anuta.bounds)
-        
-        self.anuta.populate_kb()
+        domains = {}
+        for name in self.df.columns:
+            domains[name] = Domain(DomainType.NUMERICAL, 
+                                   Bounds(self.df[name].min().item(), 
+                                          self.df[name].max().item()), 
+                                   None)
+        self.anuta = Anuta(variables, domains, constants={})
         return
+
+# class Millisampler(Constructor):
+#     def __init__(self, filepath: str) -> None:
+#         boundsfile = f"./data/meta_bounds.json"
+#         print(f"Loading data from {filepath}")
+#         self.df = pd.read_csv(filepath)
+        
+#         variables = []
+#         for col in self.df.columns:
+#             if col not in ['server_hostname', 'window', 'stride']:
+#                 # if len(col.split('_')) > 1 and col.split('_')[1].isdigit(): continue
+#                 variables.append(col)
+#         constants = {
+#             'burst_threshold': round(2891883 / 7200), # round(0.5*metadf.ingressBytes_sampled.max().item()),
+#         }
+        
+#         canaries = {
+#             'canary_max10': (0, self.df.ingressBytes_aggregate.max().item()),
+#             #^ Max(u1, u2, ..., u10) == canary_max10
+#             'canary_premise': (0, 1),
+#             'canary_conclusion': (constants['burst_threshold']+1, constants['burst_threshold']+1),
+#             #^ (canary_premise > 0) => (canary_max10 + 1 ≥ burst_threshold)
+#         }
+#         variables.extend(canaries.keys())
+
+#         #* Load the bounds directly from the file
+#         with open(boundsfile, 'r') as f:
+#             bounds = json.load(f)
+#             bounds = {k: Bounds(v[0], v[1]) for k, v in bounds.items()}
+#         # bounds = {}
+#         # for col in metadf.columns:
+#         #     if col in ['server_hostname', 'window', 'stride']: 
+#         #         continue
+#         #     bounds[col] = Bounds(metadf[col].min().item(), metadf[col].max().item())
+#         for n, c in constants.items():
+#             bounds[n] = Bounds(c, c)
+#         for n, c in canaries.items():
+#             bounds[n] = Bounds(c[0], c[1])
+        
+#         self.anuta = AnutaMilli(variables, bounds, constants, operators=[0, 1, 2])
+#         pprint(self.anuta.variables)
+#         pprint(self.anuta.constants)
+#         pprint(self.anuta.bounds)
+        
+#         self.anuta.populate_kb()
+#         return

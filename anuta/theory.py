@@ -438,7 +438,7 @@ class Theory(object):
             s = ''
             for arg in args:
                 s += f"{arg} v "
-            return s[:-3]
+            return f"({s[:-3]})"
         def implies_str(a, b): return f"({a}) ⇒ ({b})"
         def sym_str(a): return a
         def int_str(a): return int(a)

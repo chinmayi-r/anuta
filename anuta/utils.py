@@ -4,6 +4,7 @@ import sympy as sp
 import pandas as pd
 from collections import defaultdict
 import z3
+from functools import reduce
 
 from anuta.known import *
 
@@ -23,17 +24,22 @@ log.setLevel(logging.INFO)
 
 
 #* Mapping Sympy to Z3 operators:
-def eq_expr(a, b): return a == b
-def ne_expr(a, b): return a != b
-def and_expr(*args): return z3.And(*args)
-def or_expr(*args): return z3.Or(*args)
-def implies_expr(a, b): return z3.Implies(a, b)
-def equiv_expr(a, b): return a == b
-z3evalmap = {'Eq': eq_expr, 'Ne': ne_expr, 'And': and_expr, 'Or': or_expr, 'Implies': implies_expr, 'Equivalent': equiv_expr}
-for varname in cidds_categoricals:
+def z3eq(a, b): return a == b
+def z3ne(a, b): return a != b
+def z3and(*args): return z3.And(*args)
+def z3or(*args): return z3.Or(*args)
+def z3implies(a, b): return z3.Implies(a, b)
+def z3equiv(a, b): return a == b
+def z3max(*args):
+    return reduce(lambda a, b: z3.If(a >= b, a, b), args)
+z3evalmap = {'Eq': z3eq, 'Ne': z3ne, 'And': z3and, 'Or': z3or, 'Implies': z3implies, 'Equivalent': z3equiv, 'Max': z3max}
+
+for varname in cidds_categoricals + cidds_ints:
     z3evalmap[varname] = z3.Int(varname)
-for varname in cidds_numericals:
+for varname in cidds_floats:
     z3evalmap[varname] = z3.Real(varname)
+for varname in metadc_ints:
+    z3evalmap[varname] = z3.Int(varname)
 #TODO: Add vars from other datasets
 
 def transform_consequent(expression):
@@ -146,8 +152,8 @@ def is_purely_or(expr):
         True if the formula is purely made of `Or` logic with `Eq` or `Ne` comparisons, False otherwise.
     """
     # Check if the expression is a comparison operation (Eq or Ne)
-    def is_comparison(sub_expr):
-        return isinstance(sub_expr, (sp.Eq, sp.Ne))
+    def is_comparison(sub):
+        return isinstance(sub, (sp.Eq, sp.Ne))
 
     # Main logic: Traverse the tree to ensure it's purely Or logic
     if isinstance(expr, Or):  # Top-level Or
@@ -169,18 +175,18 @@ def is_pure_dnf(expr):
     """
 
     # Check if a sub-expression is a valid DNF clause
-    def is_dnf_clause(sub_expr):
+    def is_dnf_clause(sub):
         # A DNF clause must be a single variable, its negation, or an And operation
-        if isinstance(sub_expr, sp.Symbol):
+        if isinstance(sub, sp.Symbol):
             return True
-        elif isinstance(sub_expr, Not) and isinstance(sub_expr.args[0], sp.Symbol):
+        elif isinstance(sub, Not) and isinstance(sub.args[0], sp.Symbol):
             return True
-        elif isinstance(sub_expr, And):
+        elif isinstance(sub, And):
             # All terms in the And must be symbols or negated symbols
             return all(
                 isinstance(arg, sp.Symbol) or 
                 (isinstance(arg, Not) and isinstance(arg.args[0], sp.Symbol))
-                for arg in sub_expr.args
+                for arg in sub.args
             )
         return False
 
