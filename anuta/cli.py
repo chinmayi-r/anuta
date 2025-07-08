@@ -21,11 +21,10 @@ flags.DEFINE_boolean("validate", False, "Validate a dataset using a learned theo
 
 #* Configs
 flags.DEFINE_enum("tree", None, ['dt', 'xgb', 'lgbm'], "Tree learner to use for learning constraints")
-flags.DEFINE_boolean("assoc", False, "Learn constraints using an association rule learner")
-flags.DEFINE_enum("aalgo", 'fpgrowth', ['apriori', 'fpgrowth', 'hmine'], "Association rule learning algorithm to use")
+flags.DEFINE_enum("assoc", None, ['apriori', 'fpgrowth', 'hmine'], "Association rule learning algorithm to use")
 flags.DEFINE_string("limit", None, "Limit on the number of examples to learn from")
 #TODO: Generalize `dataset` to netflow and pcap.
-flags.DEFINE_enum("dataset", None, ['cidds', 'netflix', 'cicids'], "Name of the dataset to learn from")
+flags.DEFINE_enum("dataset", None, ['cidds', 'netflix', 'cicids', 'yatesbury', 'metadc'], "Name of the dataset to learn from")
 flags.mark_flag_as_required('dataset')
 flags.DEFINE_string("data", None, "Path to the dataset to learn from or validate")
 flags.mark_flag_as_required('data')

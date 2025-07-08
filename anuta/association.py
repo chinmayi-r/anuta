@@ -1,6 +1,8 @@
 from mlxtend.frequent_patterns import apriori, fpgrowth, hmine, fpmax
 from mlxtend.frequent_patterns import association_rules
 from mlxtend.preprocessing import TransactionEncoder
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from multiprocessing import cpu_count
 import pandas as pd
 from time import perf_counter
 from typing import *
@@ -13,6 +15,13 @@ from anuta.utils import log
 from anuta.grammar import DomainType
 from anuta.theory import Theory
 
+
+def _encode_rule_pair(antecedent: FrozenSet[str], consequent: FrozenSet[str]) -> List[Tuple[str, FrozenSet[str]]]:
+    # Encode antecedents
+    predicates = frozenset(f"Eq({pred.split('_')[0]},{pred.split('_')[-1]})" for pred in antecedent)
+
+    # Return list of (consequent_predicate, antecedents)
+    return [(f"Eq({pred.split('_')[0]},{pred.split('_')[-1]})", predicates) for pred in consequent]
 
 def get_missing_domain_rules(examples, domains) -> List[str]:
     """
@@ -44,7 +53,7 @@ class AsscoriationRuleLearner:
         self.kwargs = kwargs
         self.dataset = constructor.label
         #* Only support categorical variables.
-        self.df = constructor.df[cidds_categoricals]
+        self.df = constructor.df[constructor.categoricals]
         if limit and limit < self.df.shape[0]:
             log.info(f"Limiting dataset to {limit} examples.")
             self.df = self.df.sample(n=limit, random_state=42)
@@ -88,7 +97,8 @@ class AsscoriationRuleLearner:
         end = perf_counter()
         log.info(f"Association rule learning took {end - start:.2f} seconds.")
         
-        self.learned_rules = self.extract_rules(aruledf)
+        # self.learned_rules = self.extract_rules(aruledf)
+        self.learned_rules = self.extract_rules_parallel(aruledf)
         log.info(f"Extracted {len(self.learned_rules)} rules.")
         
         assumptions = set()
@@ -104,6 +114,44 @@ class AsscoriationRuleLearner:
                                 f'{self.algorithm}_{self.dataset}_{self.num_examples}.pl')
         
         return
+    
+    def extract_rules_parallel(self, aruledf: pd.DataFrame) -> List[str]:
+        premisesmap = defaultdict(set)
+        #* === Parallel rule encoding ===
+        num_cores = cpu_count()
+        futures = []
+        with ProcessPoolExecutor(max_workers=num_cores) as executor:
+            for antecedent, consequent in zip(
+                aruledf.antecedents.to_numpy(), 
+                aruledf.consequents.to_numpy()
+            ):
+                futures.append(executor.submit(_encode_rule_pair, antecedent, consequent))
+
+            for future in as_completed(futures):
+                for conseq_predicate, predicates in future.result():
+                    premisesmap[conseq_predicate].add(predicates)
+
+        #* === Merge premises → consequents (serial logic remains) ===
+        consequentsmap = defaultdict(set)
+        for conseq_predicate, premise_sets in premisesmap.items():
+            for premise in premise_sets:
+                is_redundant = False
+                for other in premise_sets - {premise}:
+                    if premise > other:  # premise is a superset
+                        is_redundant = True
+                        break
+                if not is_redundant:
+                    consequentsmap[premise].add(conseq_predicate)
+
+        #* === Format readable rules ===
+        arules = []
+        for antecedents, consequents in consequentsmap.items():
+            premise = ' & '.join(antecedents)
+            conclusion = ' & '.join(consequents)
+            arule = f"({premise}) >> ({conclusion})"
+            arules.append(arule)
+
+        return arules
     
     def extract_rules(self, aruledf: pd.DataFrame) -> List[str]:
         premisesmap = defaultdict(set)
