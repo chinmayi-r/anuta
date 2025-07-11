@@ -338,7 +338,7 @@ class LogicToNaturalLanguageConverter:
             return f"Error parsing statement: {e}\nOriginal statement: {statement}"
 
     def debug_test(self):
-        """Debug specific test case with cleaner output"""
+        """Debug specific test case"""
         test = "((Bytes > 982280) ∧ ((SrcPt = 0) ∨ (SrcPt = 137) ∨ (SrcPt = 138) ∨ (SrcPt = uninterested))) ⇒ ((DstIpAddr = private_p2p))"
         
         print("\n" + "="*80)

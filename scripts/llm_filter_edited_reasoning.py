@@ -4,6 +4,7 @@ import csv
 import json
 import argparse
 import time
+import requests
 import statistics
 from tqdm import tqdm
 from openai import AzureOpenAI
@@ -15,86 +16,25 @@ sandbox_api_key = os.environ["AI_SANDBOX_KEY"]
 sandbox_endpoint = "https://api-ai-sandbox.princeton.edu/"
 sandbox_api_version = "2024-02-01"
 model_to_be_used = "gpt-4o"
+# input_file = "rules.txt"         # Input file: one rule per line
+# output_csv = "classified_rules.csv"
 default_max_tokens_per_batch = 12000     # Adjust conservatively below token limit (16k for gpt-4o)
 default_rules_per_batch = 100             # Default rule-based batch size
 timeout = 60                     # Timeout for API requests (in seconds)
 retries = 10_000              # Number of retries for failed requests
 
-# Initialize client
+# Initialize client (if using AzureOpenAI SDK for other tasks)
 client = AzureOpenAI(
     api_key=sandbox_api_key,
     azure_endpoint=sandbox_endpoint,
     api_version=sandbox_api_version
 )
 
-# Token usage tracking
-class TokenTracker:
-    def __init__(self):
-        self.total_prompt_tokens = 0
-        self.total_completion_tokens = 0
-        self.total_tokens = 0
-        self.batch_usage = []
-        self.run_usage = []
-    
-    def add_usage(self, usage):
-        """Add usage from a single API call"""
-        if usage:
-            self.total_prompt_tokens += usage.prompt_tokens
-            self.total_completion_tokens += usage.completion_tokens
-            self.total_tokens += usage.total_tokens
-            
-            batch_info = {
-                'prompt_tokens': usage.prompt_tokens,
-                'completion_tokens': usage.completion_tokens,
-                'total_tokens': usage.total_tokens
-            }
-            self.batch_usage.append(batch_info)
-    
-    def finish_run(self):
-        """Mark the end of a run and save run statistics"""
-        run_info = {
-            'total_prompt_tokens': self.total_prompt_tokens,
-            'total_completion_tokens': self.total_completion_tokens,
-            'total_tokens': self.total_tokens,
-            'num_batches': len(self.batch_usage),
-            'batch_usage': self.batch_usage.copy()
-        }
-        self.run_usage.append(run_info)
-        
-        # Reset for next run
-        self.total_prompt_tokens = 0
-        self.total_completion_tokens = 0
-        self.total_tokens = 0
-        self.batch_usage = []
-    
-    def get_summary(self):
-        """Get summary statistics across all runs"""
-        if not self.run_usage:
-            return {"error": "No usage data available"}
-        
-        total_runs = len(self.run_usage)
-        all_tokens = [run['total_tokens'] for run in self.run_usage]
-        all_prompt_tokens = [run['total_prompt_tokens'] for run in self.run_usage]
-        all_completion_tokens = [run['total_completion_tokens'] for run in self.run_usage]
-        
-        summary = {
-            'total_runs': total_runs,
-            'grand_total_tokens': sum(all_tokens),
-            'grand_total_prompt_tokens': sum(all_prompt_tokens),
-            'grand_total_completion_tokens': sum(all_completion_tokens),
-            'per_run_stats': {
-                'avg_tokens_per_run': statistics.mean(all_tokens),
-                'std_tokens_per_run': statistics.stdev(all_tokens) if len(all_tokens) > 1 else 0,
-                'min_tokens_per_run': min(all_tokens),
-                'max_tokens_per_run': max(all_tokens)
-            },
-            'detailed_runs': self.run_usage
-        }
-        
-        return summary
-
-# Global token tracker
-token_tracker = TokenTracker()
+# Prepare HTTP headers for direct image/text POST
+headers = {
+    'api-key': sandbox_api_key,
+    'Content-Type': 'application/json'
+}
 
 # Prompt template
 system_msg = {
@@ -113,13 +53,16 @@ def build_user_message(batch_rules):
         "  • `deployment`: rules specific to a particular network's configuration, topology, or operational norms.\n\n"
         "- **meaningful**: a boolean indicating if the rule is semantically meaningful. For example, "
         "`Duration < Bytes` is likely invalid (not meaningful), while `QueueLength > 0 ⇒ PacketsReceived > 0` is valid.\n\n"
+        "- **explanation**: a brief explanation (1-2 sentences) of why you chose this classification and "
+        "meaningfulness assessment. Be specific about what makes it a protocol/principle/deployment rule "
+        "and why it is or isn't meaningful.\n\n"
         "Return a JSON array. Each element must have this format:\n"
-        "{ \"ruleid\": <line number>, \"rtype\": <protocol|principle|deployment>, \"meaningful\": <true|false> }\n\n"
+        "{ \"ruleid\": <line number>, \"rtype\": <protocol|principle|deployment>, \"meaningful\": <true|false>, \"explanation\": \"<brief explanation>\" }\n\n"
         "Classify these rules:\n"
     )
     for rule in batch_rules:
         instructions += f"{rule['id']}: {rule['text']}\n"
-    return {"role": "user", "content": instructions}
+    return {"role": "user", "content": [{"type": "text", "text": instructions}]}
 
 def extract_json_from_response(text):
     """Remove triple backticks and optional 'json' from a markdown code block."""
@@ -129,25 +72,23 @@ def extract_json_from_response(text):
     return text.strip()
 
 def call_api_with_rules(batch):
-    messages = [
-        system_msg,
-        build_user_message(batch)
-    ]
+    data = {
+        "messages": [
+            system_msg,
+            build_user_message(batch)
+        ],
+        "model": model_to_be_used,
+        "max_tokens": default_max_tokens_per_batch,
+        "temperature": 0.0
+    }
     
     for attempt in range(1, retries + 1):
         try:
-            response = client.chat.completions.create(
-                model=model_to_be_used,
-                messages=messages,
-                max_tokens=default_max_tokens_per_batch,
-                temperature=0.0,
-                timeout=timeout
-            )
-            
-            # Track token usage
-            token_tracker.add_usage(response.usage)
-            
-            content = response.choices[0].message.content
+            endpoint = f"{sandbox_endpoint}openai/deployments/{model_to_be_used}/chat/completions?api-version={sandbox_api_version}"
+            response = requests.post(endpoint, headers=headers, data=json.dumps(data), timeout=timeout)
+            response.raise_for_status()
+            result = response.json()
+            content = result["choices"][0]["message"]["content"]
 
             try:
                 cleaned = extract_json_from_response(content)
@@ -156,14 +97,14 @@ def call_api_with_rules(batch):
                 print(f"❌ Failed to parse LLM response:\n{content}\nError: {e}")
                 return []
 
+        except requests.exceptions.Timeout:
+            wait = 1
+            print(f"⏳ Timeout on attempt {attempt}. Retrying in {wait}s...")
+            time.sleep(wait)
+
         except Exception as e:
-            wait_time = min(2 ** (attempt - 1), 30)  # Exponential backoff, max 30s
-            if attempt < retries:
-                print(f"❌ Failed on attempt {attempt}: {e}. Retrying in {wait_time}s...")
-                time.sleep(wait_time)
-            else:
-                print(f"❌ Failed on attempt {attempt}: {e}")
-                break
+            print(f"❌ Failed on attempt {attempt}: {e}")
+            break
 
     print("❗ Max retries exceeded for this batch.")
     return []
@@ -216,10 +157,18 @@ def read_rules(file_path):
 
 def save_results_to_csv(results, output_file):
     with open(output_file, mode="w", newline='', encoding="utf-8") as file:
-        writer = csv.DictWriter(file, fieldnames=["ruleid", "rtype", "meaningful"])
+        writer = csv.DictWriter(file, fieldnames=["ruleid", "rtype", "meaningful", "explanation"])
         writer.writeheader()
         for entry in results:
-            writer.writerow(entry)
+            # Ensure all required fields are present
+            csv_entry = {
+                "ruleid": entry.get("ruleid", ""),
+                "rtype": entry.get("rtype", ""),
+                "meaningful": entry.get("meaningful", ""),
+                "explanation": entry.get("explanation", "")
+            }
+            writer.writerow(csv_entry)
+
 
 def classify_batches_in_parallel(batches):
     all_results = []
@@ -329,39 +278,18 @@ def save_variance_report(stats, output_file):
     with open(output_file, 'w', encoding='utf-8') as f:
         json.dump(stats, f, indent=2)
 
-def save_token_usage_report(token_summary, output_file):
-    """Save token usage analysis to JSON file."""
-    with open(output_file, 'w', encoding='utf-8') as f:
-        json.dump(token_summary, f, indent=2)
-
-def print_token_summary(token_summary):
-    """Print a nice summary of token usage."""
-    print(f"\n=== TOKEN USAGE SUMMARY ===")
-    print(f"Total Runs: {token_summary.get('total_runs', 0)}")
-    print(f"Grand Total Tokens: {token_summary.get('grand_total_tokens', 0):,}")
-    print(f"  - Prompt Tokens: {token_summary.get('grand_total_prompt_tokens', 0):,}")
-    print(f"  - Completion Tokens: {token_summary.get('grand_total_completion_tokens', 0):,}")
-    
-    if 'per_run_stats' in token_summary:
-        stats = token_summary['per_run_stats']
-        print(f"\nPer-Run Statistics:")
-        print(f"  Average tokens per run: {stats.get('avg_tokens_per_run', 0):,.1f}")
-        if stats.get('std_tokens_per_run', 0) > 0:
-            print(f"  Standard deviation: {stats.get('std_tokens_per_run', 0):,.1f}")
-        print(f"  Range: {stats.get('min_tokens_per_run', 0):,} - {stats.get('max_tokens_per_run', 0):,}")
 
 def main():
     parser = argparse.ArgumentParser(description="Classify logical rules using the Sandbox API.")
     parser.add_argument("--input", "-i", required=True, help="Path to the input file containing logical rules")
     parser.add_argument("--output", "-o", help="Path to the output CSV file (optional)")
-    parser.add_argument("--batch-size", "-b", type=int, default=default_max_tokens_per_batch,
+    parser.add_argument("--batch-size", "-b", type=int, default=default_rules_per_batch,
                        help=f"Batch size - number of rules per batch in 'rules' mode, token limit in 'tokens' mode (default: {default_rules_per_batch} rules)")
     parser.add_argument("--batch-mode", "-m", choices=["rules", "tokens"], default="rules",
                        help="Batching mode: 'rules' (by number of rules) or 'tokens' (by token limit) (default: rules)")
     parser.add_argument("--runs", "-r", type=int, default=1,
                        help="Number of runs for variance estimation (default: 1)")
     parser.add_argument("--variance-output", help="Path to save variance analysis report (JSON)")
-    parser.add_argument("--token-output", help="Path to save token usage report (JSON)")
 
     args = parser.parse_args()
     input_file = args.input
@@ -392,9 +320,6 @@ def main():
         results = classify_single_run(rules, batch_size, batch_mode)
         all_runs_results.append(results)
         
-        # Finish the run for token tracking
-        token_tracker.finish_run()
-        
         # Save main results
         save_results_to_csv(results, output_csv)
         print(f"Saved classification results to {output_csv}")
@@ -406,9 +331,6 @@ def main():
             results = classify_single_run(rules, batch_size, batch_mode)
             all_runs_results.append(results)
             
-            # Finish the run for token tracking
-            token_tracker.finish_run()
-            
             # Save individual run results
             run_output = f"{os.path.splitext(output_csv)[0]}_run_{run_idx + 1}.csv"
             save_results_to_csv(results, run_output)
@@ -418,15 +340,6 @@ def main():
         if all_runs_results:
             save_results_to_csv(all_runs_results[0], output_csv)
             print(f"Saved primary results to {output_csv}")
-    
-    # Token usage analysis
-    token_summary = token_tracker.get_summary()
-    print_token_summary(token_summary)
-    
-    # Save token usage report
-    token_output = args.token_output or f"{os.path.splitext(output_csv)[0]}_token_usage.json"
-    save_token_usage_report(token_summary, token_output)
-    print(f"Saved token usage report to {token_output}")
     
     # Variance analysis
     if num_runs > 1:

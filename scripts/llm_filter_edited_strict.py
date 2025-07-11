@@ -104,18 +104,19 @@ system_msg = {
 
 def build_user_message(batch_rules):
     instructions = (
-        "You are given a list of rules extracted from network measurement data."
-        "For each rule, classify it according to the following:\n\n"
-        "- **rtype** (rule type), which must be one of:\n"
-        "  • `protocol`: rules derived from network protocol specifications (e.g., TCP, UDP behavior).\n"
-        "  • `principle`: rules that arise from general performance, behavioral, or theoretical principles, "
-        "like queueing theory or latency constraints.\n"
-        "  • `deployment`: rules specific to a particular network's configuration, topology, or operational norms.\n\n"
-        "- **meaningful**: a boolean indicating if the rule is semantically meaningful. For example, "
-        "`Duration < Bytes` is likely invalid (not meaningful), while `QueueLength > 0 ⇒ PacketsReceived > 0` is valid.\n\n"
-        "Return a JSON array. Each element must have this format:\n"
+        "You are given a list of logical rules extracted from network measurement data. "
+        "For each rule, classify it carefully according to the following criteria:\n\n"
+        "- **rtype** (rule type):\n"
+        "  • `protocol`: ONLY if clearly derived from network protocol specs (e.g., TCP flags, UDP behavior).\n"
+        "  • `principle`: ONLY for general performance/behavioral principles (queueing theory, latency constraints).\n"
+        "  • `deployment`: ONLY if clearly specific to a particular network's configuration.\n\n"
+        "- **meaningful**: Be STRICT. Only mark as true if the rule makes clear logical sense. "
+        "Reject rules with nonsensical comparisons or invalid logic structures.\n\n"
+        "IMPORTANT: When in doubt, mark as not meaningful. "
+        "False negatives are preferable to false positives.\n\n"
+        "Return a JSON array with this exact format for each rule:\n"
         "{ \"ruleid\": <line number>, \"rtype\": <protocol|principle|deployment>, \"meaningful\": <true|false> }\n\n"
-        "Classify these rules:\n"
+        "Rules to classify (be critical!):\n"
     )
     for rule in batch_rules:
         instructions += f"{rule['id']}: {rule['text']}\n"
